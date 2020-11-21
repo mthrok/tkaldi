@@ -4,9 +4,8 @@ title: Approaches to port Kaldi features
 categories: []
 excerpt: Approaches to port Kaldi features
 published: true
+comment_id: 1
 ---
-
-**Disclaimer** I occasionally build Kaldi, and have run some recipes, but I am not an expert in the field nor daily user of Kaldi. So my understanding is very shallow and can be wrong.
 
 [Kaldi](https://github.com/kaldi-asr/kaldi) is a software for Automatic Speech Recognition (ASR), which had enormous impact on both research of and production system.
 
