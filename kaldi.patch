@@ -1,0 +1,63 @@
+Submodule third_party/kaldi contains untracked content
+Submodule third_party/kaldi contains modified content
+diff --git a/third_party/kaldi/src/base/kaldi-types.h b/third_party/kaldi/src/base/kaldi-types.h
+index 7ebf4f853..c15b288b2 100644
+--- a/third_party/kaldi/src/base/kaldi-types.h
++++ b/third_party/kaldi/src/base/kaldi-types.h
+@@ -41,6 +41,7 @@ typedef float   BaseFloat;
+ 
+ // for discussion on what to do if you need compile kaldi
+ // without OpenFST, see the bottom of this this file
++/*
+ #include <fst/types.h>
+ 
+ namespace kaldi {
+@@ -53,10 +54,10 @@ namespace kaldi {
+   typedef float   float32;
+   typedef double double64;
+ }  // end namespace kaldi
++*/
+ 
+ // In a theoretical case you decide compile Kaldi without the OpenFST
+ // comment the previous namespace statement and uncomment the following
+-/*
+ namespace kaldi {
+   typedef int8_t   int8;
+   typedef int16_t  int16;
+@@ -70,6 +71,5 @@ namespace kaldi {
+   typedef float    float32;
+   typedef double   double64;
+ }  // end namespace kaldi
+-*/
+ 
+ #endif  // KALDI_BASE_KALDI_TYPES_H_
+diff --git a/third_party/kaldi/src/feat/resample.cc b/third_party/kaldi/src/feat/resample.cc
+index 11f4c62bf..797be5357 100644
+--- a/third_party/kaldi/src/feat/resample.cc
++++ b/third_party/kaldi/src/feat/resample.cc
+@@ -23,8 +23,6 @@
+ 
+ #include <algorithm>
+ #include <limits>
+-#include "feat/feature-functions.h"
+-#include "matrix/matrix-functions.h"
+ #include "feat/resample.h"
+ 
+ namespace kaldi {
+diff --git a/third_party/kaldi/src/feat/resample.h b/third_party/kaldi/src/feat/resample.h
+index e0b4688c9..aa3831fde 100644
+--- a/third_party/kaldi/src/feat/resample.h
++++ b/third_party/kaldi/src/feat/resample.h
+@@ -29,10 +29,9 @@
+ #include <string>
+ #include <vector>
+ 
+-
+-#include "matrix/matrix-lib.h"
+-#include "util/common-utils.h"
+ #include "base/kaldi-error.h"
++#include "matrix/kaldi-vector.h"
++#include "matrix/kaldi-matrix.h"
+ 
+ namespace kaldi {
+ /// @addtogroup  feat FeatureExtraction
