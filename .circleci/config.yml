@@ -9,7 +9,7 @@ jobs:
     environment:
       PYTHON_VERSION: << parameters.python_version >>
     docker:
-      - image: "mthrok/tkaldi-test-base:py${PYTHON_VERSION}-0c6a3dcf0"
+      - image: "mthrok/tkaldi-test-base:py${PYTHON_VERSION}-0c6a3dcf0-2020-11-24"
     steps:
       - checkout
       - run:

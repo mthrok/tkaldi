@@ -3,13 +3,13 @@ FROM ubuntu:18.04 as builder
 ################################################################################
 # Build Kaldi using MKL installed with conda
 ################################################################################
+
 # Dynamic parameters
 ARG PYTHON_VERSION
 
 # Constant parameters
 ENV BASH_ENV=/opt/bash_env
 ENV CONDA_DIR=/opt/conda
-ENV KALDI_DIR=/opt/kaldi
 
 # 1. Install essentials
 RUN apt update -q && apt install -y wget git build-essential && rm -rf /var/lib/apt/lists/*
@@ -20,6 +20,7 @@ RUN bash /src/setup_conda_env.sh
 
 # 3. Build Kaldi
 ARG KALDI_COMMIT=0c6a3dcf0
+ENV KALDI_DIR=/opt/kaldi
 
 ADD ./scripts/build_kaldi.sh /src/
 RUN bash /src/build_kaldi.sh
@@ -41,7 +42,6 @@ ARG PYTHON_VERSION
 # Constant parameters
 ENV BASH_ENV=/opt/bash_env
 ENV CONDA_DIR=/opt/conda
-ENV ENV_DIR=/opt/env
 
 # 1. Install the essentials
 RUN apt update -q && apt install -y wget git build-essential && rm -rf /var/lib/apt/lists/*
