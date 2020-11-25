@@ -31,33 +31,65 @@ index 7ebf4f853..c15b288b2 100644
 -*/
  
  #endif  // KALDI_BASE_KALDI_TYPES_H_
+diff --git a/third_party/kaldi/src/feat/feature-functions.h b/third_party/kaldi/src/feat/feature-functions.h
+index 52454f304..a50322952 100644
+--- a/third_party/kaldi/src/feat/feature-functions.h
++++ b/third_party/kaldi/src/feat/feature-functions.h
+@@ -27,7 +27,7 @@
+ #include <vector>
+ 
+ #include "matrix/matrix-lib.h"
+-#include "util/common-utils.h"
++// #include "util/common-utils.h"
+ #include "base/kaldi-error.h"
+ 
+ namespace kaldi {
 diff --git a/third_party/kaldi/src/feat/resample.cc b/third_party/kaldi/src/feat/resample.cc
-index 11f4c62bf..797be5357 100644
+index 11f4c62bf..43ab8c962 100644
 --- a/third_party/kaldi/src/feat/resample.cc
 +++ b/third_party/kaldi/src/feat/resample.cc
-@@ -23,8 +23,6 @@
+@@ -23,7 +23,7 @@
  
  #include <algorithm>
  #include <limits>
 -#include "feat/feature-functions.h"
--#include "matrix/matrix-functions.h"
++// #include "feat/feature-functions.h"
+ #include "matrix/matrix-functions.h"
  #include "feat/resample.h"
  
- namespace kaldi {
 diff --git a/third_party/kaldi/src/feat/resample.h b/third_party/kaldi/src/feat/resample.h
-index e0b4688c9..aa3831fde 100644
+index e0b4688c9..43fcf3fa4 100644
 --- a/third_party/kaldi/src/feat/resample.h
 +++ b/third_party/kaldi/src/feat/resample.h
-@@ -29,10 +29,9 @@
- #include <string>
- #include <vector>
+@@ -31,7 +31,7 @@
  
--
--#include "matrix/matrix-lib.h"
+ 
+ #include "matrix/matrix-lib.h"
 -#include "util/common-utils.h"
++// #include "util/common-utils.h"
  #include "base/kaldi-error.h"
-+#include "matrix/kaldi-vector.h"
-+#include "matrix/kaldi-matrix.h"
  
  namespace kaldi {
- /// @addtogroup  feat FeatureExtraction
+diff --git a/third_party/kaldi/src/matrix/matrix-lib.h b/third_party/kaldi/src/matrix/matrix-lib.h
+index b6059b06c..4fb9e1b16 100644
+--- a/third_party/kaldi/src/matrix/matrix-lib.h
++++ b/third_party/kaldi/src/matrix/matrix-lib.h
+@@ -25,14 +25,14 @@
+ #include "base/kaldi-common.h"
+ #include "matrix/kaldi-vector.h"
+ #include "matrix/kaldi-matrix.h"
+-#include "matrix/sp-matrix.h"
+-#include "matrix/tp-matrix.h"
++// #include "matrix/sp-matrix.h"
++// #include "matrix/tp-matrix.h"
+ #include "matrix/matrix-functions.h"
+ #include "matrix/srfft.h"
+ #include "matrix/compressed-matrix.h"
+-#include "matrix/sparse-matrix.h"
++// #include "matrix/sparse-matrix.h"
+ #include "matrix/optimization.h"
+-#include "matrix/numpy-array.h"
++// #include "matrix/numpy-array.h"
+ 
+ #endif
+ 

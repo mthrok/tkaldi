@@ -44,8 +44,13 @@ def _copy_source_files():
         'base/kaldi-utils.h',
         'base/kaldi-math.h',
         'base/timer.h',
+        'matrix/compressed-matrix.h',
         'matrix/matrix-common.h',
+        'matrix/matrix-functions.h',
+        'matrix/matrix-functions-inl.h',
         'matrix/matrix-lib.h',
+        'matrix/optimization.h',
+        'matrix/srfft.h',
         'feat/resample.h',
         'feat/resample.cc',
     ]
