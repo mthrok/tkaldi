@@ -1,3 +1,4 @@
+import os
 import setuptools
 from pathlib import Path
 
@@ -38,7 +39,9 @@ def _main():
         },
         packages=setuptools.find_packages(where='src'),
         package_dir={'': 'src'},
-        install_requires=['torch >= 1.7'],
+        install_requires=[
+            'torch >= 1.7',
+        ],
         zip_safe=False,
     )
 

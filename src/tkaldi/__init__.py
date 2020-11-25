@@ -1,4 +1,11 @@
+"""Initialize tkaldi submodules and TorchScript extension"""
+from . import (  # noqa: F401 # pylint: disable=unused-import
+    feats,
+)
+
+
 def _init_extension():
+    # pylint: disable=import-outside-toplevel
     import importlib
     import torch
 
