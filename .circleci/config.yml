@@ -1,0 +1,36 @@
+version: 2.1
+
+jobs:
+  unittest:
+    parameters:
+      python_version:
+        description: Python version
+        type: string
+    environment:
+      PYTHON_VERSION: << parameters.python_version >>
+    docker:
+      - image: "mthrok/tkaldi-test-base:py${PYTHON_VERSION}-0c6a3dcf0"
+    steps:
+      - checkout
+      - run:
+          name: Setup Env
+          command: .circleci/unittest/setup_env.sh
+      - run:
+          name: Build
+          command: .circleci/unittest/build.sh
+      - run:
+          name: Run test
+          command: .circleci/unittest/run_test.sh
+
+workflows:
+  unittest:
+    jobs:
+      - unittest:
+          name: unittest_py3.6
+          python_version: "3.6"
+      - unittest:
+          name: unittest_py3.7
+          python_version: "3.7"
+      - unittest:
+          name: unittest_py3.8
+          python_version: "3.8"
