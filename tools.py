@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 
-_ROOT_DIR = Path(__file__).parent
+_ROOT_DIR = Path(__file__).parent.resolve()
 _PATCH_FILE = _ROOT_DIR / 'kaldi.patch'
 _KALDI_DIR = _ROOT_DIR / 'third_party' / 'kaldi'
 _TKALDI_SRC_DIR = _ROOT_DIR / 'src' / 'libtkaldi'
@@ -24,14 +24,14 @@ def _init_workspace():
     print('Reverting Kaldi ...')
     _call(['git', 'checkout', '.'], cwd=_KALDI_DIR)
     print('Applying patch ...')
-    _call(['git', 'apply', str(_PATCH_FILE)])
+    _call(['git', 'apply', str(_PATCH_FILE)], cwd=_KALDI_DIR)
 
 
 def _generate_patch():
     print('Generating the patch at', _PATCH_FILE.relative_to(_ROOT_DIR))
     with open(_PATCH_FILE, 'w') as file_:
-        command = ['git', 'diff', '--submodule=diff', '--', str(_KALDI_DIR)]
-        _call(command, stdout=file_)
+        command = ['git', 'diff']
+        _call(command, cwd=_KALDI_DIR, stdout=file_)
 
 
 def _copy_source_files():
@@ -67,7 +67,7 @@ def _build():
 
 
 def _diff():
-    _call(['git', 'diff', '--submodule=diff', '--', str(_KALDI_DIR)])
+    _call(['git', 'diff'], cwd=_KALDI_DIR)
 
 
 def _parse_args(subcommands):
