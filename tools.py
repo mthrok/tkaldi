@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 
-_ROOT_DIR = Path(__file__).parent.resolve()
+_ROOT_DIR = Path(__file__).parent
 _PATCH_FILE = _ROOT_DIR / 'kaldi.patch'
 _KALDI_DIR = _ROOT_DIR / 'third_party' / 'kaldi'
 _TKALDI_SRC_DIR = _ROOT_DIR / 'src' / 'libtkaldi'
@@ -17,26 +17,30 @@ def _call(commands, cwd=_ROOT_DIR, **kwargs):
     subprocess.check_call(commands, cwd=cwd, **kwargs)
 
 
-def _init_workspace():
+def _init_workspace(_args):
     print('Initializing submodule...')
     _call(['git', 'submodule', 'sync'])
     _call(['git', 'submodule', 'update', '--init', '--recursive'])
     print('Reverting Kaldi ...')
     _call(['git', 'checkout', '.'], cwd=_KALDI_DIR)
     print('Applying patch ...')
-    _call(['git', 'apply', str(_PATCH_FILE)], cwd=_KALDI_DIR)
+    _call(['git', 'apply', str(_PATCH_FILE.resolve())], cwd=_KALDI_DIR)
 
 
-def _generate_patch():
-    print('Generating the patch at', _PATCH_FILE.relative_to(_ROOT_DIR))
+def _generate_patch(_args):
+    print('Generating the patch at', _PATCH_FILE)
     with open(_PATCH_FILE, 'w') as file_:
         command = ['git', 'diff']
         _call(command, cwd=_KALDI_DIR, stdout=file_)
 
 
+def _clean_src():
+    _call(['git', 'clean', '-xdf', 'src'])
+
+
 def _generate_version_file():
     cwd = _KALDI_DIR / 'src' / 'base'
-    _call(['bash', './get_version.sh'], cwd=cwd)
+    _call(['bash', 'get_version.sh'], cwd=cwd)
 
 
 def _copy_source_files():
@@ -65,17 +69,19 @@ def _copy_source_files():
         src = _KALDI_DIR / 'src' / p
         tgt = _TKALDI_SRC_DIR / 'src' / p
         tgt.parent.mkdir(parents=True, exist_ok=True)
+        print(f'Copying {tgt}')
         shutil.copy2(src, tgt)
 
 
-def _build():
+def _develop(_args):
+    _clean_src()
     _generate_version_file()
     _copy_source_files()
     _call(['pip', 'install', '-e', '.'])
 
 
-def _diff():
-    _call(['git', 'diff'], cwd=_KALDI_DIR)
+def _diff(args):
+    _call(['git', 'diff'] + args, cwd=_KALDI_DIR)
 
 
 def _parse_args(subcommands):
@@ -83,6 +89,7 @@ def _parse_args(subcommands):
         description=__doc__,
     )
     parser.add_argument('subcommand', choices=subcommands)
+    parser.add_argument('rest', nargs=argparse.REMAINDER)
     return parser.parse_args()
 
 
@@ -91,11 +98,12 @@ def _main():
         'init': _init_workspace,
         'gen': _generate_patch,
         'generate_patch': _generate_patch,
-        'build': _build,
+        'dev': _develop,
+        'develop': _develop,
         'diff': _diff,
     }
     args = _parse_args(subcommands.keys())
-    subcommands[args.subcommand]()
+    subcommands[args.subcommand](args.rest)
     print('Complete.')
 
 
