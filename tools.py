@@ -34,16 +34,23 @@ def _generate_patch():
         _call(command, cwd=_KALDI_DIR, stdout=file_)
 
 
+def _generate_version_file():
+    cwd = _KALDI_DIR / 'src' / 'base'
+    _call(['bash', './get_version.sh'], cwd=cwd)
+
+
 def _copy_source_files():
     _sources = [
         'base/io-funcs.h',
         'base/io-funcs-inl.h',
         'base/kaldi-common.h',
         'base/kaldi-error.h',
+        'base/kaldi-error.cc',
         'base/kaldi-types.h',
         'base/kaldi-utils.h',
         'base/kaldi-math.h',
         'base/timer.h',
+        'base/version.h',
         'matrix/compressed-matrix.h',
         'matrix/matrix-common.h',
         'matrix/matrix-functions.h',
@@ -62,6 +69,7 @@ def _copy_source_files():
 
 
 def _build():
+    _generate_version_file()
     _copy_source_files()
     _call(['pip', 'install', '-e', '.'])
 

@@ -1,7 +1,7 @@
 // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h
 
-#ifndef TORCHAUDIO_KALDI_MATRIX_H
-#define TORCHAUDIO_KALDI_MATRIX_H
+#ifndef KALDI_MATRIX_KALDI_MATRIX_H_
+#define KALDI_MATRIX_KALDI_MATRIX_H_
 
 #include <torch/script.h>
 #include <matrix/matrix-common.h>
