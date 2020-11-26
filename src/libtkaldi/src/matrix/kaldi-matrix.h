@@ -13,10 +13,18 @@ namespace kaldi {
 namespace {
 
 template<typename Real>
-void assert_matrix_shape(const torch::Tensor &tensor_) {
+void assert_matrix_shape(const torch::Tensor &tensor_);
+
+template<>
+void assert_matrix_shape<float>(const torch::Tensor &tensor_) {
   TORCH_INTERNAL_ASSERT(tensor_.ndimension() == 2);
-  static_assert(std::is_same<Real, float>::value, "Matrix class only supports float32.");
   TORCH_INTERNAL_ASSERT(tensor_.dtype() == torch::kFloat32);
+}
+
+template<>
+void assert_matrix_shape<double>(const torch::Tensor &tensor_) {
+  TORCH_INTERNAL_ASSERT(tensor_.ndimension() == 2);
+  TORCH_INTERNAL_ASSERT(tensor_.dtype() == torch::kFloat64);
 }
 
 } // namespace
@@ -95,10 +103,23 @@ struct Matrix : MatrixBase<Real> {
   Matrix() : MatrixBase<Real>() {}
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L789-L793
- Matrix(const MatrixIndexT r, const MatrixIndexT c,
-        MatrixResizeType resize_type = kSetZero,
-        MatrixStrideType stride_type = kDefaultStride):
-      MatrixBase<Real>() { Resize(r, c, resize_type, stride_type); }
+  Matrix(const MatrixIndexT r, const MatrixIndexT c,
+         MatrixResizeType resize_type = kSetZero,
+         MatrixStrideType stride_type = kDefaultStride)
+    : MatrixBase<Real>() { Resize(r, c, resize_type, stride_type); }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L808-L811
+  explicit Matrix(const MatrixBase<Real> & M,
+                  MatrixTransposeType trans = kNoTrans)
+    : MatrixBase<Real>(trans == kNoTrans ? M.tensor_ : M.tensor_.transpose(1, 0))
+    {}
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L816-L819
+  template<typename OtherReal>
+  explicit Matrix(const MatrixBase<OtherReal> & M,
+                  MatrixTransposeType trans = kNoTrans)
+    : MatrixBase<Real>(trans == kNoTrans ? M.tensor_ : M.tensor_.transpose(1, 0))
+    {}
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L859-L874
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.cc#L817-L857

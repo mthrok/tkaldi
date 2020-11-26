@@ -13,10 +13,18 @@ namespace kaldi {
 namespace {
 
 template<typename Real>
-void assert_vector_shape(const torch::Tensor &tensor_) {
+void assert_vector_shape(const torch::Tensor &tensor_);
+
+template<>
+void assert_vector_shape<float>(const torch::Tensor &tensor_) {
   TORCH_INTERNAL_ASSERT(tensor_.ndimension() == 1);
-  static_assert(std::is_same<Real, float>::value, "Vector class only supports float32.");
   TORCH_INTERNAL_ASSERT(tensor_.dtype() == torch::kFloat32);
+}
+
+template<>
+void assert_vector_shape<double>(const torch::Tensor &tensor_) {
+  TORCH_INTERNAL_ASSERT(tensor_.ndimension() == 1);
+  TORCH_INTERNAL_ASSERT(tensor_.dtype() == torch::kFloat64);
 }
 
 } // namespace
@@ -83,10 +91,32 @@ struct VectorBase {
     tensor_.copy_(v.tensor_);
   }
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L137-L139
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.cc#L816-L832
+  void ApplyFloor(Real floor_val, MatrixIndexT *floored_count = nullptr) {
+    auto index = tensor_ < floor_val;
+    auto tmp = tensor_.index_put_({index}, floor_val);
+    if (floored_count) {
+      *floored_count = index.sum().item().template to<MatrixIndexT>();
+    }
+  }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L164-L165
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.cc#L449-L479
+  void ApplyPow(Real power) {
+    tensor_.pow_(power);
+    TORCH_INTERNAL_ASSERT(! tensor_.isnan().sum().item().to<int32_t>());
+  }
+
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L181-L184
   template<typename OtherReal>
   void AddVec(const Real alpha, const VectorBase<OtherReal> &v) {
     tensor_ += alpha * v.tensor_;
+  }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L186-L187
+  void AddVec2(const Real alpha, const VectorBase<Real> &v) {
+    tensor_ += alpha * (v.tensor_.square());
   }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L196-L198
@@ -98,6 +128,11 @@ struct VectorBase {
       mat = mat.transpose(1, 0);
     }
     tensor_.addmv(mat, v.tensor_, beta, alpha);
+  }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L221-L222
+  void MulElements(const VectorBase<Real> &v) {
+    tensor_ *= v.tensor_;
   }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L233-L234
@@ -131,6 +166,33 @@ struct VectorBase {
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L312-L313
   Real Sum() const { return tensor_.sum().item().to<Real>(); };
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L320-L321
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.cc#L718-L736
+  void AddRowSumMat(Real alpha, const MatrixBase<Real> &M, Real beta = 1.0) {
+    Vector<Real> ones(M.NumRows());
+    ones.Set(1.0);
+    this->AddMatVec(alpha, M, kTrans, ones, beta);
+  }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L323-L324
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.cc#L738-L757
+  void AddColSumMat(Real alpha, const MatrixBase<Real> &M, Real beta = 1.0) {
+    Vector<Real> ones(M.NumCols());
+    ones.Set(1.0);
+    this->AddMatVec(alpha, M, kNoTrans, ones, beta);
+  }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L326-L330
+  void AddDiagMat2(Real alpha, const MatrixBase<Real> &M,
+                   MatrixTransposeType trans = kNoTrans, Real beta = 1.0) {
+    auto mat = M.tensor_;
+    if (trans == kNoTrans) {
+      tensor_ = beta * tensor_ + torch::diag(torch::mm(mat, mat.transpose(1, 0)));
+    } else {
+      tensor_ = beta * tensor_ + torch::diag(torch::mm(mat.transpose(1, 0), mat));
+    }
+  }
 
 protected:
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L362-L365
