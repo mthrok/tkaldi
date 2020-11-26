@@ -170,9 +170,10 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-#
+# Jekyll
+.jekyll-cache/
+_site/
+
+# libtkaldi source
 /src/libtkaldi/src/
 !/src/libtkaldi/src/matrix
-
-
-
