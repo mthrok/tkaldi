@@ -1,0 +1,4 @@
+build
+src
+third_party
+*.egg-info

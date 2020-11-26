@@ -98,7 +98,7 @@
     var callToAction =
       "<hr/>" +
       "<p>" +
-      "This comment section uses GitHub Issues. You can leave a comment <a href='https://github.com/mthrok/kaldi-torch/issues/{{ page.comment_id }}'>here</a>." +
+      "This comment section uses GitHub Issues. You can leave a comment <a href='https://github.com/mthrok/tkaldi/issues/{{ page.comment_id }}'>here</a>." +
       "</p>"
     writeToComment("div", callToAction)
   }
@@ -107,14 +107,14 @@
     var callToAction =
       "<hr/>" +
       "<p>" +
-      "This comment section uses GitHub Issues. You can leave a comment <a href='https://github.com/mthrok/kaldi-torch/issues/{{ page.comment_id }}'>here</a>." +
+      "This comment section uses GitHub Issues. You can leave a comment <a href='https://github.com/mthrok/tkaldi/issues/{{ page.comment_id }}'>here</a>." +
       "</p>"
     writeToComment("div", callToAction)
   }
 
   if (window.fetch) {
     var url =
-      "https://api.github.com/repos/mthrok/kaldi-torch/issues/{{ page.comment_id }}/comments"
+      "https://api.github.com/repos/mthrok/tkaldi/issues/{{ page.comment_id }}/comments"
     window
       .fetch(url, { Accept: "application/vnd.github.v3.html+json" })
       .then(function (response) {
