@@ -83,7 +83,7 @@ Unlike these memory-related issues, implementing algebraic operations are straig
     if (trans == kTrans) {
       mat = mat.transpose(1, 0);
     }
-    tensor_.addmv(mat, v.tensor_, beta, alpha);
+    tensor_.addmv_(mat, v.tensor_, beta, alpha);
   }
 ```
 
