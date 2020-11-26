@@ -127,7 +127,7 @@ struct VectorBase {
     if (trans == kTrans) {
       mat = mat.transpose(1, 0);
     }
-    tensor_.addmv(mat, v.tensor_, beta, alpha);
+    tensor_.addmv_(mat, v.tensor_, beta, alpha);
   }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L221-L222
@@ -221,11 +221,12 @@ struct Vector : VectorBase<Real> {
                   MatrixResizeType resize_type = kSetZero)
       : VectorBase<Real>() {  Resize(s, resize_type);  }
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L406-L410
+  // Unlike the comment in the original implementation, this is necessary.
+  Vector(const Vector<Real> &v) : VectorBase<Real>(v.tensor_.clone())  {}
+
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L412-L416
-  explicit Vector(const VectorBase<Real> &v) : VectorBase<Real>() {
-    Resize(v.Dim(), kUndefined);
-    this->CopyFromVec(v);
-  }
+  explicit Vector(const VectorBase<Real> &v) : VectorBase<Real>(v.tensor_.clone()) {}
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L434-L435
   void Swap(Vector<Real> *other) {
@@ -236,21 +237,20 @@ struct Vector : VectorBase<Real> {
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L444-L451
   void Resize(MatrixIndexT length, MatrixResizeType resize_type = kSetZero) {
-    // Note: The original Kaldi implementation uses in-place resizing, but here, a new Tensor is allocated.
-    // TODO: Check the difference.
     auto &tensor_ = VectorBase<Real>::tensor_;
     switch(resize_type) {
     case kSetZero:
-      tensor_ = torch::zeros({length});
+      tensor_.resize_({length}).zero_();
       break;
     case kUndefined:
-      tensor_ = torch::empty({length});
+      tensor_.resize_({length});
       break;
     case kCopyData:
-      auto t = torch::zeros({length});
-      auto numel = length > tensor_.numel() ? tensor_.numel() : length;
-      t.index_put_({Slice(None, numel)}, tensor_.index({Slice(None, numel)}));
-      tensor_ = t;
+      auto tmp = tensor_;
+      auto tmp_numel = tensor_.numel();
+      tensor_.resize_({length}).zero_();
+      auto numel = Slice(length < tmp_numel ? length : tmp_numel);
+      tensor_.index_put_({numel}, tmp.index({numel}));
       break;
     }
   }
@@ -274,9 +274,16 @@ struct SubVector : VectorBase<Real> {
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L524-L528
   SubVector(const MatrixBase<Real> &matrix, MatrixIndexT row)
-    : VectorBase<Real>(matrix.tensor_.index({Slice(row), Slice()}))
+    : VectorBase<Real>(matrix.tensor_.index({row}))
     {}
 };
+
+// https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L540-L543
+template<typename Real>
+std::ostream & operator << (std::ostream & out, const VectorBase<Real> & v) {
+  out << v.tensor_;
+  return out;
+}
 
 // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L573-L575
 template<typename Real>

@@ -52,7 +52,7 @@ struct MatrixBase {
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L177-L178
   void CopyColFromVec(const VectorBase<Real> &v, const MatrixIndexT col) {
-    tensor_.index_put_({Slice(), Slice(col)}, v.tensor_);
+    tensor_.index_put_({Slice(), col}, v.tensor_);
   }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L99-L107
@@ -127,22 +127,22 @@ struct Matrix : MatrixBase<Real> {
               const MatrixIndexT c,
               MatrixResizeType resize_type = kSetZero,
               MatrixStrideType stride_type = kDefaultStride) {
-    // Note: The original Kaldi implementation uses in-place resizing, but here, a new Tensor is allocated.
-    // TODO: Check the difference.
     auto &tensor_ = MatrixBase<Real>::tensor_;
     switch(resize_type) {
     case kSetZero:
-      tensor_ = torch::zeros({r, c});
+      tensor_.resize_({r, c}).zero_();
       break;
     case kUndefined:
-      tensor_ = torch::empty({r, c});
+      tensor_.resize_({r, c});
       break;
     case kCopyData:
-      auto t = torch::zeros({r, c});
-      auto num_row = r < tensor_.size(0) ? r : tensor_.size(0);
-      auto num_col = c < tensor_.size(1) ? c : tensor_.size(1);
-      t.index_put_({Slice(None, num_row), Slice(None, num_col)}, tensor_.index({Slice(None, num_row), Slice(None, num_col)}));
-      tensor_ = t;
+      auto tmp = tensor_;
+      auto tmp_rows = tmp.size(0);
+      auto tmp_cols = tmp.size(1);
+      tensor_.resize_({r, c}).zero_();
+      auto rows = Slice(None, r < tmp_rows ? r : tmp_rows);
+      auto cols = Slice(None, c < tmp_cols ? c : tmp_cols);
+      tensor_.index_put_({rows, cols}, tmp.index({rows, cols}));
       break;
     }
   }
@@ -167,7 +167,13 @@ struct SubMatrix : MatrixBase<Real> {
             const MatrixIndexT c)   // number of columns, c > 0
     : MatrixBase<Real>(T.tensor_.index({Slice(ro, ro+r), Slice(co, co+c)})) {}
 };
- 
+
+// https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L1059-L1060
+template<typename Real>
+std::ostream & operator << (std::ostream & Out, const MatrixBase<Real> & M) {
+  Out << M.tensor_;
+  return Out;
+}
   
 } // namespace kaldi
 
