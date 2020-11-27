@@ -1,3 +1,29 @@
+// matrix/kaldi-vector.cc
+
+// Copyright 2009-2011  Microsoft Corporation;  Lukas Burget;
+//                      Saarland University;   Go Vivace Inc.;  Ariya Rastrow;
+//                      Petr Schwarz;  Yanmin Qian;  Jan Silovsky;
+//                      Haihua Xu; Wei Shi
+//                2015  Guoguo Chen
+//                2017  Daniel Galvez
+
+
+// See https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/COPYING
+// for clarification regarding multiple authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+// THIS CODE IS PROVIDED *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+// WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+// MERCHANTABLITY OR NON-INFRINGEMENT.
+// See the Apache 2 License for the specific language governing permissions and
+// limitations under the License.
+
 #include "matrix/kaldi-vector.h"
 #include "matrix/kaldi-matrix.h"
 
