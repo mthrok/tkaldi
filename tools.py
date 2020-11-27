@@ -46,12 +46,14 @@ def _generate_version_file():
 def _copy_source_files():
     _sources = [
         'base/io-funcs.h',
+        'base/io-funcs.cc',
         'base/io-funcs-inl.h',
         'base/kaldi-common.h',
         'base/kaldi-error.h',
         'base/kaldi-error.cc',
         'base/kaldi-types.h',
         'base/kaldi-utils.h',
+        'base/kaldi-utils.cc',
         'base/kaldi-math.h',
         'base/kaldi-math.cc',
         'base/timer.h',
@@ -59,6 +61,7 @@ def _copy_source_files():
         'itf/online-feature-itf.h',
         'itf/options-itf.h',
         'matrix/compressed-matrix.h',
+        'matrix/compressed-matrix.cc',
         'matrix/matrix-common.h',
         'matrix/matrix-functions.h',
         'matrix/matrix-functions-inl.h',
