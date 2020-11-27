@@ -84,6 +84,9 @@ struct MatrixBase {
     return tensor_.index({Slice(r), Slice(c)}).item().to<Real>();
   }
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L124-L125
+  void SetZero() { tensor_.zero_(); }
+
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L138-L141
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.cc#L859-L898
   template<typename OtherReal>
@@ -100,6 +103,14 @@ struct MatrixBase {
     return SubVector<Real>(*this, i);
   }
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L200-L207
+  inline SubMatrix<Real> Range(const MatrixIndexT row_offset,
+                               const MatrixIndexT num_rows,
+                               const MatrixIndexT col_offset,
+                               const MatrixIndexT num_cols) const {
+    return SubMatrix<Real>(*this, row_offset, num_rows,
+                           col_offset, num_cols);
+  }
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L208-L211
   inline SubMatrix<Real> RowRange(const MatrixIndexT row_offset,
                                   const MatrixIndexT num_rows) const {
@@ -111,6 +122,9 @@ struct MatrixBase {
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L226-L227
   Real Min() const {return tensor_.min().item().to<Real>(); }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L235-L236
+  void Scale(Real alpha) { tensor_ *= alpha; }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L567-L569
   void AddMat(const Real alpha, const MatrixBase<Real> &M,
@@ -165,6 +179,9 @@ struct Matrix : MatrixBase<Real> {
     : MatrixBase<Real>(trans == kNoTrans ? M.tensor_ : M.tensor_.transpose(1, 0))
     {}
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L829-L830
+  explicit Matrix(const CompressedMatrix &C);
+
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L845-L847
   void Read(std::istream & in, bool binary, bool add = false);
 
@@ -204,15 +221,45 @@ struct Matrix : MatrixBase<Real> {
   }
 };
 
+// https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L913-L924
+struct HtkHeader {
+  /// Number of samples.
+  int32    mNSamples;
+  /// Sample period.
+  int32    mSamplePeriod;
+  /// Sample size
+  int16    mSampleSize;
+  /// Sample kind.
+  uint16   mSampleKind;
+};
+
+// https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L926-L928
+template<typename Real>
+bool ReadHtk(std::istream &is, Matrix<Real> *M, HtkHeader *header_ptr);
+
+// https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L930-L932
+template<typename Real>
+bool WriteHtk(std::ostream &os, const MatrixBase<Real> &M, HtkHeader htk_hdr);
+ 
 // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L940-L948
 template<typename Real>
 struct SubMatrix : MatrixBase<Real> {
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L950-L959
   SubMatrix(const MatrixBase<Real>& T,
             const MatrixIndexT ro,  // row offset, 0 < ro < NumRows()
             const MatrixIndexT r,   // number of rows, r > 0
             const MatrixIndexT co,  // column offset, 0 < co < NumCols()
             const MatrixIndexT c)   // number of columns, c > 0
-    : MatrixBase<Real>(T.tensor_.index({Slice(ro, ro+r), Slice(co, co+c)})) {}
+    : MatrixBase<Real>(T.tensor_.index({Slice(ro, ro+r), Slice(co, co+c)}))
+    {}
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L961-L966
+  SubMatrix(Real *data,
+            MatrixIndexT num_rows,
+            MatrixIndexT num_cols,
+            MatrixIndexT stride)
+    : MatrixBase<Real>(torch::from_blob(data, {num_rows, num_cols}, {stride, 1}))
+    {}
 };
 
 // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L1059-L1060

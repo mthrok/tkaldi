@@ -66,7 +66,11 @@ def _copy_source_files():
         'matrix/matrix-functions.h',
         'matrix/matrix-functions-inl.h',
         'matrix/matrix-lib.h',
+        'matrix/numpy-array.h',
+        'matrix/numpy-array.cc',
         'matrix/optimization.h',
+        'matrix/sparse-matrix.h',
+        'matrix/sparse-matrix.cc',
         'matrix/srfft.h',
         'feat/feature-common.h',
         'feat/feature-common-inl.h',
@@ -82,8 +86,28 @@ def _copy_source_files():
         'feat/pitch-functions.cc',
         'feat/resample.h',
         'feat/resample.cc',
+        'feat/wave-reader.h',
+        'feat/wave-reader.cc',
+        'featbin/compute-kaldi-pitch-feats.cc',
         'util/common-utils.h',
+        'util/kaldi-holder.h',
+        'util/kaldi-holder.cc',
+        'util/kaldi-holder-inl.h',
+        'util/kaldi-io.h',
+        'util/kaldi-io.cc',
+        'util/kaldi-io-inl.h',
+        'util/kaldi-pipebuf.h',
+        'util/kaldi-semaphore.h',
+        'util/kaldi-semaphore.cc',
+        'util/kaldi-table.h',
+        'util/kaldi-table.cc',
+        'util/kaldi-table-inl.h',
         'util/parse-options.h',
+        'util/parse-options.cc',
+        'util/stl-utils.h',
+        'util/table-types.h',
+        'util/text-utils.h',
+        'util/text-utils.cc',
     ]
     for p in _sources:
         src = _KALDI_DIR / 'src' / p
@@ -97,7 +121,7 @@ def _develop(_args):
     _clean_src()
     _generate_version_file()
     _copy_source_files()
-    _call(['pip', 'install', '-e', '.'])
+    _call(['python', 'setup.py', 'develop'])
 
 
 def _diff(args):
