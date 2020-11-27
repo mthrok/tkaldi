@@ -65,6 +65,7 @@ struct VectorBase {
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L74-L79
   inline Real operator() (MatrixIndexT i) const {
     return tensor_.index({i}).item().to<Real>();
+    // return tensor_.accessor<Real, 1>()[i];
   };
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L81-L86
@@ -222,8 +223,8 @@ struct Vector : VectorBase<Real> {
       : VectorBase<Real>() {  Resize(s, resize_type);  }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L406-L410
-  // Unlike the comment in the original implementation, this is necessary.
-  Vector(const Vector<Real> &v) : VectorBase<Real>(v.tensor_.clone())  {}
+  // Note: unlike the original implementation, this is "explicit".
+  explicit Vector(const Vector<Real> &v) : VectorBase<Real>(v.tensor_.clone())  {}
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L412-L416
   explicit Vector(const VectorBase<Real> &v) : VectorBase<Real>(v.tensor_.clone()) {}
