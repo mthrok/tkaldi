@@ -98,9 +98,9 @@ This will run `git-clean` on the current [`src/libtkaldi`](./src/libtkaldi) (so 
 under source control will be removed), copy the designated source codes from `third_party/kaldi` directory,
 then run `python setup.py develop` to build the library.
 
-* `./tools.py generate_patch` or `./tools.py gen`
+* `./tools.py stash`
 This will stash the changes made to Kaldi submodule to [`kaldi.patch`](./kaldi.patch). When you apply change to
-the original source code of Kaldi and you need to persist the change, you need to check-in the patch.
+the original source code of Kaldi and you need to persist the change accross commits, you need to check-in the patch.
 
 ### Getting Started
 

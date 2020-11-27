@@ -141,8 +141,7 @@ def _parse_args(subcommands):
 def _main():
     subcommands = {
         'init': _init_workspace,
-        'gen': _generate_patch,
-        'generate_patch': _generate_patch,
+        'stash': _generate_patch,
         'dev': _develop,
         'develop': _develop,
         'diff': _diff,
