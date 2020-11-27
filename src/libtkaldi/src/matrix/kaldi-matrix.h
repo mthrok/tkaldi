@@ -89,6 +89,19 @@ struct MatrixBase {
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L226-L227
   Real Min() const {return tensor_.min().item().to<Real>(); }
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L567-L569
+  void AddMat(const Real alpha, const MatrixBase<Real> &M,
+              MatrixTransposeType transA = kNoTrans) {
+    tensor_ += alpha * (transA == kNoTrans ? M.tensor_ : M.tensor_.transpose(1, 0));
+  }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L720-L723
+  void Read(std::istream & in, bool binary, bool add = false);
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L724-L725
+  void Write(std::ostream & out, bool binary) const;
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L741
 protected:
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L749-L753
@@ -121,6 +134,9 @@ struct Matrix : MatrixBase<Real> {
                   MatrixTransposeType trans = kNoTrans)
     : MatrixBase<Real>(trans == kNoTrans ? M.tensor_ : M.tensor_.transpose(1, 0))
     {}
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L845-L847
+  void Read(std::istream & in, bool binary, bool add = false);
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L859-L874
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.cc#L817-L857
