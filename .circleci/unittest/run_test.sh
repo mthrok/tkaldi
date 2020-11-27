@@ -2,5 +2,6 @@
 
 set -eux
 
-cd tests
-pytest unit_test -v
+python -m torch.utils.collect_env
+
+pytest tests/tkaldi_unittest -v
