@@ -30,6 +30,21 @@ struct MatrixBase {
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L65-L66
   inline MatrixIndexT NumCols() const { return tensor_.size(1); };
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L68-L69
+  inline MatrixIndexT Stride() const {  return tensor_.stride(0); }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L77-L80
+  inline const Real* Data() const { return tensor_.data_ptr<Real>(); }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L82-L83
+  inline Real* Data() { return tensor_.data_ptr<Real>(); }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L85-L90
+  inline  Real* RowData(MatrixIndexT i) { return tensor_.index({i}).data_ptr<Real>(); }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L92-L97
+  inline const Real* RowData(MatrixIndexT i) const { return tensor_.index({i}).data_ptr<Real>(); }
+
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L177-L178
   void CopyColFromVec(const VectorBase<Real> &v, const MatrixIndexT col) {
     tensor_.index_put_({Slice(), col}, v.tensor_);
@@ -67,6 +82,12 @@ struct MatrixBase {
                                   const MatrixIndexT num_rows) const {
     return SubMatrix<Real>(*this, row_offset, num_rows, 0, NumCols());
   }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L224-L225
+  Real Max() const { return tensor_.max().item().to<Real>(); }
+
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L226-L227
+  Real Min() const {return tensor_.min().item().to<Real>(); }
 
 protected:
 
