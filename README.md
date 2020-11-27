@@ -86,8 +86,11 @@ Instead, this repository references Kaldi as `git-submodule` and copy the requir
 
 [tools.py](./tools.py) facilitates this process.
 
+**Note** When changing the list of source files under source control in [`src/libtkaldi/src`](./src/libtkaldi/src),
+edit [`.gitignore`](.gitignore) and [`tools.py`](./tools.py)
+
 * `./tools.py init`  
-This will sync the Kaldi submodule (in [third_party/kaldi](./third_party)), clean up the any changes present there,
+This will sync the Kaldi submodule (in [`third_party/kaldi`](./third_party)), clean up the any changes present there,
 then apply the patch form [`kaldi.patch`](./kaldi.patch).
 
 * `./tools.py dev`  
