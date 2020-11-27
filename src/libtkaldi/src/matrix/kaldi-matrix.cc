@@ -27,6 +27,50 @@ MatrixBase<Real>::MatrixBase(torch::Tensor tensor) : tensor_(tensor) {
   assert_matrix_shape<Real>(tensor_);
 };
 
+// https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.cc#L1377-L1418
+template<typename Real>
+void MatrixBase<Real>::Write(std::ostream &os, bool binary) const {
+  if (!os.good()) {
+    KALDI_ERR << "Failed to write matrix to stream: stream not good";
+  }
+  if (binary) {  // Use separate binary and text formats,
+    // since in binary mode we need to know if it's float or double.
+    std::string my_token = (sizeof(Real) == 4 ? "FM" : "DM");
+
+    WriteToken(os, binary, my_token);
+    {
+      int32 rows = this->NumRows();  // make the size 32-bit on disk.
+      int32 cols = this->NumCols();
+      KALDI_ASSERT(this->NumRows() == (MatrixIndexT) rows);
+      KALDI_ASSERT(this->NumCols() == (MatrixIndexT) cols);
+      WriteBasicType(os, binary, rows);
+      WriteBasicType(os, binary, cols);
+    }
+    if (Stride() == NumCols())
+      os.write(reinterpret_cast<const char*> (Data()), sizeof(Real)
+               * static_cast<size_t>(NumRows()) * static_cast<size_t>(NumCols()));
+    else
+      for (MatrixIndexT i = 0; i < NumRows(); i++)
+        os.write(reinterpret_cast<const char*> (RowData(i)), sizeof(Real)
+                 * NumCols());
+    if (!os.good()) {
+      KALDI_ERR << "Failed to write matrix to stream";
+    }
+  } else {  // text mode.
+    if (NumCols() == 0) {
+      os << " [ ]\n";
+    } else {
+      os << " [";
+      for (MatrixIndexT i = 0; i < NumRows(); i++) {
+        os << "\n  ";
+        for (MatrixIndexT j = 0; j < NumCols(); j++)
+          os << (*this)(i, j) << " ";
+      }
+      os << "]\n";
+    }
+  }
+}
+
 // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.cc#L1421-L1445
 template<typename Real>
 void MatrixBase<Real>::Read(std::istream & is, bool binary, bool add) {
