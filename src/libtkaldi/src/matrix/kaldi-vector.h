@@ -4,30 +4,11 @@
 #define KALDI_MATRIX_KALDI_VECTOR_H_
 
 #include <torch/torch.h>
-#include <matrix/matrix-common.h>
+#include "matrix/matrix-common.h"
 
 using namespace torch::indexing;
 
 namespace kaldi {
-
-namespace {
-
-template<typename Real>
-void assert_vector_shape(const torch::Tensor &tensor_);
-
-template<>
-void assert_vector_shape<float>(const torch::Tensor &tensor_) {
-  TORCH_INTERNAL_ASSERT(tensor_.ndimension() == 1);
-  TORCH_INTERNAL_ASSERT(tensor_.dtype() == torch::kFloat32);
-}
-
-template<>
-void assert_vector_shape<double>(const torch::Tensor &tensor_) {
-  TORCH_INTERNAL_ASSERT(tensor_.ndimension() == 1);
-  TORCH_INTERNAL_ASSERT(tensor_.dtype() == torch::kFloat64);
-}
-
-} // namespace
 
 template<typename Real> struct MatrixBase;
 
@@ -40,9 +21,7 @@ struct VectorBase {
   torch::Tensor tensor_;
 
   /// Construct VectorBase which is an interface to an existing torch::Tensor object.
-  VectorBase(torch::Tensor tensor) : tensor_(tensor) {
-    assert_vector_shape<Real>(tensor_);
-  };
+  VectorBase(torch::Tensor tensor);
 
   ////////////////////////////////////////////////////////////////////////////////
   // Kaldi-compatible methods
@@ -197,9 +176,7 @@ struct VectorBase {
 
 protected:
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L362-L365
-  explicit VectorBase() : tensor_(torch::empty({0})) {
-    assert_vector_shape<Real>(tensor_);
-  };
+  explicit VectorBase();
 };
 
 // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L385-L390
@@ -237,6 +214,7 @@ struct Vector : VectorBase<Real> {
   }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L444-L451
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.cc#L189-L223
   void Resize(MatrixIndexT length, MatrixResizeType resize_type = kSetZero) {
     auto &tensor_ = VectorBase<Real>::tensor_;
     switch(resize_type) {

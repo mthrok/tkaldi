@@ -1,3 +1,21 @@
+################################################################################
+# Things specific to this project
+################################################################################
+
+# libtkaldi source
+# It's trickier than you think https://stackoverflow.com/a/16318111
+src/libtkaldi/src/*
+!src/libtkaldi/src/matrix
+src/libtkaldi/src/matrix/*
+!src/libtkaldi/src/matrix/kaldi-vector.h
+!src/libtkaldi/src/matrix/kaldi-vector.cc
+!src/libtkaldi/src/matrix/kaldi-matrix.h
+!src/libtkaldi/src/matrix/kaldi-matrix.cc
+
+################################################################################
+# C / C++
+################################################################################
+
 # Prerequisites
 *.d
 
@@ -30,6 +48,10 @@
 *.exe
 *.out
 *.app
+
+################################################################################
+# Python
+################################################################################
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -170,10 +192,10 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+################################################################################
+# Jekyll
+################################################################################
+
 # Jekyll
 .jekyll-cache/
 _site/
-
-# libtkaldi source
-/src/libtkaldi/src/
-!/src/libtkaldi/src/matrix
