@@ -145,6 +145,13 @@ struct Matrix : MatrixBase<Real> {
          MatrixStrideType stride_type = kDefaultStride)
     : MatrixBase<Real>() { Resize(r, c, resize_type, stride_type); }
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L802-L803
+  void Swap(Matrix<Real> *other) {
+    auto tmp = this->tensor_;
+    this->tensor_ = other->tensor_;
+    other->tensor_ = tmp;
+  }
+
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L808-L811
   explicit Matrix(const MatrixBase<Real> & M,
                   MatrixTransposeType trans = kNoTrans)
