@@ -2,4 +2,3 @@
 
 ./tools.py init
 ./tools.py develop
-pip install .

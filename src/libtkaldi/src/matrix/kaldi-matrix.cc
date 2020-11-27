@@ -297,6 +297,13 @@ bad:
             << " File position at start is "
             << pos_at_start << ", currently " << is.tellg();
 }
+  
+// https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.cc#L2060-L2064
+template<class Real>
+Matrix<Real>::Matrix(const CompressedMatrix &M): MatrixBase<Real>() {
+  Resize(M.NumRows(), M.NumCols(), kUndefined);
+  M.CopyToMat(this);
+}
 
 template struct Matrix<float>;
 template struct Matrix<double>;

@@ -277,6 +277,12 @@ struct SubVector : VectorBase<Real> {
     : VectorBase<Real>(t.tensor_.index({Slice(origin, origin + length)}))
     {}
 
+  // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L515-L521
+  // NOTE: This should not take the ownership of the underlying memory object
+  SubVector(const Real *data, MatrixIndexT length)
+    : VectorBase<Real>(torch::from_blob((void*)data, {length}))
+    {}
+  
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L524-L528
   SubVector(const MatrixBase<Real> &matrix, MatrixIndexT row)
     : VectorBase<Real>(matrix.tensor_.index({row}))
