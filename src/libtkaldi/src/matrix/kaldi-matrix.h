@@ -4,30 +4,12 @@
 #define KALDI_MATRIX_KALDI_MATRIX_H_
 
 #include <torch/torch.h>
-#include <matrix/matrix-common.h>
+#include "matrix/matrix-common.h"
+#include "matrix/kaldi-vector.h"
 
 using namespace torch::indexing;
 
 namespace kaldi {
-
-namespace {
-
-template<typename Real>
-void assert_matrix_shape(const torch::Tensor &tensor_);
-
-template<>
-void assert_matrix_shape<float>(const torch::Tensor &tensor_) {
-  TORCH_INTERNAL_ASSERT(tensor_.ndimension() == 2);
-  TORCH_INTERNAL_ASSERT(tensor_.dtype() == torch::kFloat32);
-}
-
-template<>
-void assert_matrix_shape<double>(const torch::Tensor &tensor_) {
-  TORCH_INTERNAL_ASSERT(tensor_.ndimension() == 2);
-  TORCH_INTERNAL_ASSERT(tensor_.dtype() == torch::kFloat64);
-}
-
-} // namespace
 
 // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L44-L48
 template<typename Real>
@@ -37,9 +19,7 @@ struct MatrixBase {
   ////////////////////////////////////////////////////////////////////////////////
   torch::Tensor tensor_;
   /// Construct VectorBase which is an interface to an existing torch::Tensor object.
-  MatrixBase(torch::Tensor tensor) : tensor_(tensor) {
-    assert_matrix_shape<Real>(tensor_);
-  }
+  MatrixBase(torch::Tensor tensor);
 
   ////////////////////////////////////////////////////////////////////////////////
   // Kaldi-compatible items
