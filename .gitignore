@@ -12,6 +12,9 @@ src/libtkaldi/src/matrix/*
 !src/libtkaldi/src/matrix/kaldi-matrix.h
 !src/libtkaldi/src/matrix/kaldi-matrix.cc
 
+# binary executables
+src/tkaldi/bin/*
+
 ################################################################################
 # C / C++
 ################################################################################
