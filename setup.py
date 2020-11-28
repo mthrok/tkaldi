@@ -1,8 +1,8 @@
 import os
-import torch
 import subprocess
 from pathlib import Path
 
+import torch
 import setuptools
 from setuptools.command.build_ext import build_ext
 
