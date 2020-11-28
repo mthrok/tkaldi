@@ -101,7 +101,7 @@ def _generate_patch(_args):
 
 
 def _clean_src():
-    _call(['git', 'clean', '-xdf', 'src'])
+    _call(['git', 'clean', '-xdf', 'src/libtkaldi/src'])
 
 
 def _generate_version_file():
