@@ -8,7 +8,7 @@ jobs:
         type: string
     environment:
       # The default machine (resource_class: medium) does not have enought memory
-      MAX_JOBS: "1"
+      CMAKE_BUILD_PARALLEL_LEVEL: "1"
       PYTHON_VERSION: << parameters.python_version >>
     docker:
       - image: "mthrok/tkaldi-test-base:py${PYTHON_VERSION}-0c6a3dcf0-2020-11-24"
