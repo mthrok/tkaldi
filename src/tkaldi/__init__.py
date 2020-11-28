@@ -9,7 +9,7 @@ def _init_extension():
     import importlib
     import torch
 
-    module = importlib.util.find_spec('tkaldi._tkaldi')
+    module = importlib.util.find_spec('tkaldi.libtkaldi')
     if module is None:
         raise ImportError('tkaldi C++ extension module is not available.')
     path = module.origin

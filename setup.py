@@ -17,8 +17,7 @@ def _get_cxx11_abi():
         return 0
 
 
-# https://github.com/pybind/cmake_example/blob/580c5fd29d4651db99d8874714b07c0c49a53f8a/setup.py#L25
-class BuildExtension(build_ext, object):
+class BuildExtension(build_ext):
     def build_extension(self, ext):
         extdir = os.path.abspath(
             os.path.dirname(self.get_ext_fullpath(ext.name)))
@@ -64,8 +63,8 @@ class BuildExtension(build_ext, object):
             ["cmake", "--build", "."] + build_args, cwd=self.build_temp
         )
 
-    def get_ext_filename(self, ext_name):
-        ext_filename = super(BuildExtension, self).get_ext_filename(ext_name)
+    def get_ext_filename(self, fullname):
+        ext_filename = super().get_ext_filename(fullname)
         ext_filename_parts = ext_filename.split('.')
         without_abi = ext_filename_parts[:-2] + ext_filename_parts[-1:]
         ext_filename = '.'.join(without_abi)
@@ -75,7 +74,7 @@ class BuildExtension(build_ext, object):
 def _get_ext_modules():
     return [
         setuptools.Extension(
-            name='tkaldi._tkaldi',
+            name='tkaldi.libtkaldi',
             sources=[],
         ),
     ]
