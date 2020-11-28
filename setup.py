@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -8,13 +9,7 @@ from setuptools.command.build_ext import build_ext
 
 _ROOT_DIR = Path(__file__).parent.resolve()
 _CSRC_DIR = _ROOT_DIR / 'src' / 'libtkaldi'
-
-
-def _get_cxx11_abi():
-    try:
-        return int(torch._C._GLIBCXX_USE_CXX11_ABI)
-    except ImportError:
-        return 0
+_BIN_DIR = _ROOT_DIR / 'src' / 'tkaldi' / 'bin'
 
 
 class BuildExtension(build_ext):
@@ -35,7 +30,6 @@ class BuildExtension(build_ext):
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DCMAKE_BUILD_TYPE={cfg}",
             f"-DCMAKE_PREFIX_PATH={torch.utils.cmake_prefix_path}",
-            f"-DCMAKE_CXX_FLAGS=-D_GLIBCXX_USE_CXX11_ABI={_get_cxx11_abi()}",
         ]
         build_args = [
             "--verbose",
@@ -64,6 +58,13 @@ class BuildExtension(build_ext):
             ["cmake", "--build", "."] + build_args, cwd=self.build_temp
         )
 
+        # Copy binary
+        src_bin_dir = Path(self.build_temp) / 'src' / 'libtkaldi'
+        _BIN_DIR.mkdir(parents=True, exist_ok=True)
+        for bin_name in ['compute-kaldi-pitch-feats']:
+            print(f'Copying {bin_name}')
+            shutil.copy2(src_bin_dir / bin_name, _BIN_DIR / bin_name)
+
     def get_ext_filename(self, fullname):
         ext_filename = super().get_ext_filename(fullname)
         ext_filename_parts = ext_filename.split('.')
@@ -90,6 +91,9 @@ def _main():
         cmdclass={'build_ext': BuildExtension},
         packages=setuptools.find_packages(where='src'),
         package_dir={'': 'src'},
+        data_files=[
+            ('src/tkaldi/bin', ['compute-kaldi-pitch-feats']),
+        ],
         install_requires=[
             'torch >= 1.7',
         ],
