@@ -67,7 +67,7 @@ The next step is to port `compute-kaldi-pitch-feats` CLI so that I can compare t
 original CLI and the ported version.
 
 - [x] Extend the Vector / Matrix classes [bc8ac3c0](https://github.com/mthrok/tkaldi/tree/bc8ac3c0e85c4cb08242c837f7ccaf39b49ca619/src/libtkaldi/src/matrix).
-- [ ] Compile `compute-kaldi-pitch-feats`
+- [x] Compile `compute-kaldi-pitch-feats` (#12)
 - [ ] Compare the speed of the original `compute-kaldi-pitch-feats` and ported one.
 
 ### Phase 3 - Improve the performace of `ComputeKaldiPitch`
