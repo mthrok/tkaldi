@@ -8,7 +8,6 @@ import setuptools
 from setuptools.command.build_ext import build_ext
 
 _ROOT_DIR = Path(__file__).parent.resolve()
-_CSRC_DIR = _ROOT_DIR / 'src' / 'libtkaldi'
 _BIN_DIR = _ROOT_DIR / 'src' / 'tkaldi' / 'bin'
 
 
@@ -16,6 +15,7 @@ class BuildExtension(build_ext):
     def build_extension(self, ext):
         extdir = os.path.abspath(
             os.path.dirname(self.get_ext_fullpath(ext.name)))
+        bindir = Path(os.path.join(extdir, 'bin'))
 
         # required for auto-detection of auxiliary "native" libs
         if not extdir.endswith(os.path.sep):
@@ -28,6 +28,7 @@ class BuildExtension(build_ext):
         # from Python.
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
+            f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={bindir}",
             f"-DCMAKE_BUILD_TYPE={cfg}",
             f"-DCMAKE_PREFIX_PATH={torch.utils.cmake_prefix_path}",
         ]
@@ -38,6 +39,9 @@ class BuildExtension(build_ext):
         # default to Ninja
         if 'CMAKE_GENERATOR' not in os.environ:
             cmake_args += ["-GNinja"]
+
+        if 'CMAKE_CXX_FLAGS' in os.environ:
+            cmake_args += [f"-DCMAKE_CXX_FLAGS={os.environ['CMAKE_CXX_FLAGS']}"]
 
         # Set CMAKE_BUILD_PARALLEL_LEVEL to control the parallel build level
         # across all generators.
@@ -59,11 +63,10 @@ class BuildExtension(build_ext):
         )
 
         # Copy binary
-        src_bin_dir = Path(self.build_temp) / 'src' / 'libtkaldi'
         _BIN_DIR.mkdir(parents=True, exist_ok=True)
         for bin_name in ['compute-kaldi-pitch-feats']:
             print(f'Copying {bin_name}')
-            shutil.copy2(src_bin_dir / bin_name, _BIN_DIR / bin_name)
+            shutil.copy2(bindir / bin_name, _BIN_DIR / bin_name)
 
     def get_ext_filename(self, fullname):
         ext_filename = super().get_ext_filename(fullname)
