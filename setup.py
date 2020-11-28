@@ -32,13 +32,14 @@ class BuildExtension(build_ext):
         # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
         # from Python.
         cmake_args = [
-            "-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DCMAKE_BUILD_TYPE={cfg}",
             f"-DCMAKE_PREFIX_PATH={torch.utils.cmake_prefix_path}",
-            f"-D_GLIBCXX_USE_CXX11_ABI={_get_cxx11_abi()}",
+            f"-DCMAKE_CXX_FLAGS=-D_GLIBCXX_USE_CXX11_ABI={_get_cxx11_abi()}",
         ]
-        build_args = []
+        build_args = [
+            "--verbose",
+        ]
 
         # default to Ninja
         if 'CMAKE_GENERATOR' not in os.environ:
