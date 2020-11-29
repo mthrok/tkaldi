@@ -67,7 +67,6 @@
   var loadComments = function (data) {
     writeToComment("h2", "Comments")
     for (var i = 0; i < data.length; i++) {
-      console.log(data[i])
       var cuser = data[i].user.login
       var cuserlink = data[i].user.html_url
       var clink = data[i].html_url
