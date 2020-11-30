@@ -13,9 +13,9 @@ _BIN_DIR = _ROOT_DIR / 'src' / 'tkaldi' / 'bin'
 
 class BuildExtension(build_ext):
     def build_extension(self, ext):
-        extdir = os.path.abspath(
-            os.path.dirname(self.get_ext_fullpath(ext.name)))
-        bindir = Path(os.path.join(extdir, 'bin'))
+        ext_path = Path(self.get_ext_fullpath(ext.name))
+        extdir = str(ext_path.parent.resolve())
+        bindir = ext_path.parent.resolve() / 'bin'
 
         # required for auto-detection of auxiliary "native" libs
         if not extdir.endswith(os.path.sep):
@@ -64,9 +64,10 @@ class BuildExtension(build_ext):
 
         # Copy binary
         _BIN_DIR.mkdir(parents=True, exist_ok=True)
-        for bin_name in ['compute-kaldi-pitch-feats']:
-            print(f'Copying {bin_name}')
-            shutil.copy2(bindir / bin_name, _BIN_DIR / bin_name)
+        bins = [f.stem for f in bindir.iterdir() if f.is_file()]
+        for bin_ in bins:
+            print(f'copying {bin_}')
+            shutil.copy2(bindir / bin_, _BIN_DIR / bin_)
 
     def get_ext_filename(self, fullname):
         ext_filename = super().get_ext_filename(fullname)
