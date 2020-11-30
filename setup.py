@@ -13,23 +13,18 @@ _BIN_DIR = _ROOT_DIR / 'src' / 'tkaldi' / 'bin'
 
 class BuildExtension(build_ext):
     def build_extension(self, ext):
-        ext_path = Path(self.get_ext_fullpath(ext.name))
-        extdir = str(ext_path.parent.resolve())
-        bindir = ext_path.parent.resolve() / 'bin'
+        ext_path = Path(self.get_ext_fullpath(ext.name)).parent.resolve()
+        bindir = ext_path / 'bin'
 
+        extdir = str(ext_path)
         # required for auto-detection of auxiliary "native" libs
         if not extdir.endswith(os.path.sep):
             extdir += os.path.sep
 
-        cfg = "Debug" if self.debug else "Release"
-
-        # Set Python_EXECUTABLE instead if you use PYBIND11_FINDPYTHON
-        # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
-        # from Python.
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={bindir}",
-            f"-DCMAKE_BUILD_TYPE={cfg}",
+            f"-DCMAKE_BUILD_TYPE={'Debug' if self.debug else 'Release'}",
             f"-DCMAKE_PREFIX_PATH={torch.utils.cmake_prefix_path}",
         ]
         build_args = [
@@ -41,7 +36,8 @@ class BuildExtension(build_ext):
             cmake_args += ["-GNinja"]
 
         if 'CMAKE_CXX_FLAGS' in os.environ:
-            cmake_args += [f"-DCMAKE_CXX_FLAGS={os.environ['CMAKE_CXX_FLAGS']}"]
+            flags = os.environ['CMAKE_CXX_FLAGS']
+            cmake_args += [f"-DCMAKE_CXX_FLAGS={flags}"]
 
         # Set CMAKE_BUILD_PARALLEL_LEVEL to control the parallel build level
         # across all generators.
@@ -64,8 +60,7 @@ class BuildExtension(build_ext):
 
         # Copy binary
         _BIN_DIR.mkdir(parents=True, exist_ok=True)
-        bins = [f.stem for f in bindir.iterdir() if f.is_file()]
-        for bin_ in bins:
+        for bin_ in [f.stem for f in bindir.iterdir() if f.is_file()]:
             print(f'copying {bin_}')
             shutil.copy2(bindir / bin_, _BIN_DIR / bin_)
 
