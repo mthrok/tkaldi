@@ -8,27 +8,23 @@ import setuptools
 from setuptools.command.build_ext import build_ext
 
 _ROOT_DIR = Path(__file__).parent.resolve()
-_CSRC_DIR = _ROOT_DIR / 'src' / 'libtkaldi'
 _BIN_DIR = _ROOT_DIR / 'src' / 'tkaldi' / 'bin'
 
 
 class BuildExtension(build_ext):
     def build_extension(self, ext):
-        extdir = os.path.abspath(
-            os.path.dirname(self.get_ext_fullpath(ext.name)))
+        ext_path = Path(self.get_ext_fullpath(ext.name)).parent.resolve()
+        bindir = ext_path / 'bin'
 
+        extdir = str(ext_path)
         # required for auto-detection of auxiliary "native" libs
         if not extdir.endswith(os.path.sep):
             extdir += os.path.sep
 
-        cfg = "Debug" if self.debug else "Release"
-
-        # Set Python_EXECUTABLE instead if you use PYBIND11_FINDPYTHON
-        # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
-        # from Python.
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
-            f"-DCMAKE_BUILD_TYPE={cfg}",
+            f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={bindir}",
+            f"-DCMAKE_BUILD_TYPE={'Debug' if self.debug else 'Release'}",
             f"-DCMAKE_PREFIX_PATH={torch.utils.cmake_prefix_path}",
         ]
         build_args = [
@@ -38,6 +34,10 @@ class BuildExtension(build_ext):
         # default to Ninja
         if 'CMAKE_GENERATOR' not in os.environ:
             cmake_args += ["-GNinja"]
+
+        if 'CMAKE_CXX_FLAGS' in os.environ:
+            flags = os.environ['CMAKE_CXX_FLAGS']
+            cmake_args += [f"-DCMAKE_CXX_FLAGS={flags}"]
 
         # Set CMAKE_BUILD_PARALLEL_LEVEL to control the parallel build level
         # across all generators.
@@ -59,11 +59,10 @@ class BuildExtension(build_ext):
         )
 
         # Copy binary
-        src_bin_dir = Path(self.build_temp) / 'src' / 'libtkaldi'
         _BIN_DIR.mkdir(parents=True, exist_ok=True)
-        for bin_name in ['compute-kaldi-pitch-feats']:
-            print(f'Copying {bin_name}')
-            shutil.copy2(src_bin_dir / bin_name, _BIN_DIR / bin_name)
+        for bin_ in [f.stem for f in bindir.iterdir() if f.is_file()]:
+            print(f'copying {bin_}')
+            shutil.copy2(bindir / bin_, _BIN_DIR / bin_)
 
     def get_ext_filename(self, fullname):
         ext_filename = super().get_ext_filename(fullname)
