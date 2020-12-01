@@ -2,3 +2,6 @@
 	path = third_party/kaldi
 	url = https://github.com/kaldi-asr/kaldi
 	ignore = dirty
+[submodule "third_party/FlameGraph"]
+	path = third_party/FlameGraph
+	url = https://github.com/brendangregg/FlameGraph
