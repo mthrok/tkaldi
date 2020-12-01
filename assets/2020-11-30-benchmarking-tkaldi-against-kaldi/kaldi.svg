@@ -1,0 +1,1636 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="390" onload="init(evt)" viewBox="0 0 1200 390" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search, #ignorecase { opacity:0.5; cursor:pointer; }
+	#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		ignorecaseBtn = document.getElementById("ignorecase");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+		currentSearchTerm = null;
+	}
+
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom();
+			zoom(target);
+		}
+		else if (e.target.id == "unzoom") unzoom();
+		else if (e.target.id == "search") search_prompt();
+		else if (e.target.id == "ignorecase") toggle_ignorecase();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	}, false)
+
+	// ctrl-I to toggle case-sensitive search
+	window.addEventListener("keydown",function (e) {
+		if (e.ctrlKey && e.keyCode === 73) {
+			e.preventDefault();
+			toggle_ignorecase();
+		}
+	}, false)
+
+	// functions
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+		return;
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x = txt.length - 2; x > 0; x--) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+		search();
+	}
+	function unzoom() {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+		search();
+	}
+
+	// search
+	function toggle_ignorecase() {
+		ignorecase = !ignorecase;
+		if (ignorecase) {
+			ignorecaseBtn.classList.add("show");
+		} else {
+			ignorecaseBtn.classList.remove("show");
+		}
+		reset_search();
+		search();
+	}
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)"
+			    + (ignorecase ? ", ignoring case" : "")
+			    + "\nPress Ctrl-i to toggle case sensitivity", "");
+			if (term != null) {
+				currentSearchTerm = term;
+				search();
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			currentSearchTerm = null;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		if (currentSearchTerm === null) return;
+		var term = currentSearchTerm;
+
+		var re = new RegExp(term, ignorecase ? 'i' : '');
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="1200.0" height="390.0" fill="url(#background)"  />
+<text id="title" x="600.00" y="24" >Flame graph of Kaldi's compute-kaldi-pitch-feats</text>
+<text id="details" x="10.00" y="373" > </text>
+<text id="unzoom" x="10.00" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="1050.00" y="24" >Search</text>
+<text id="ignorecase" x="1110.00" y="24" >Ignore Case</text>
+<text id="matched" x="1090.00" y="373" > </text>
+<g id="frames">
+<g >
+<title>libc_feholdsetround_sse_ctx (10 samples, 0.58%)</title><rect x="579.6" y="149" width="6.8" height="15.0" fill="rgb(229,172,36)" rx="2" ry="2" />
+<text  x="582.63" y="159.5" ></text>
+</g>
+<g >
+<title>_dl_start (1 samples, 0.06%)</title><rect x="995.8" y="293" width="0.7" height="15.0" fill="rgb(209,198,11)" rx="2" ry="2" />
+<text  x="998.82" y="303.5" ></text>
+</g>
+<g >
+<title>?? (2 samples, 0.12%)</title><rect x="667.9" y="197" width="1.4" height="15.0" fill="rgb(254,23,33)" rx="2" ry="2" />
+<text  x="670.89" y="207.5" ></text>
+</g>
+<g >
+<title>mkl_blas_sgbmv (31 samples, 1.78%)</title><rect x="887.2" y="117" width="21.0" height="15.0" fill="rgb(250,155,36)" rx="2" ry="2" />
+<text  x="890.19" y="127.5" ></text>
+</g>
+<g >
+<title>mkl_blas__sdot@plt (4 samples, 0.23%)</title><rect x="293.1" y="149" width="2.7" height="15.0" fill="rgb(248,155,37)" rx="2" ry="2" />
+<text  x="296.12" y="159.5" ></text>
+</g>
+<g >
+<title>?? (2 samples, 0.12%)</title><rect x="992.4" y="165" width="1.4" height="15.0" fill="rgb(216,217,52)" rx="2" ry="2" />
+<text  x="995.43" y="175.5" ></text>
+</g>
+<g >
+<title>swapper (267 samples, 15.36%)</title><rect x="1008.7" y="325" width="181.3" height="15.0" fill="rgb(249,182,37)" rx="2" ry="2" />
+<text  x="1011.72" y="335.5" >swapper</text>
+</g>
+<g >
+<title>memcpy (1 samples, 0.06%)</title><rect x="666.5" y="181" width="0.7" height="15.0" fill="rgb(219,41,7)" rx="2" ry="2" />
+<text  x="669.54" y="191.5" ></text>
+</g>
+<g >
+<title>perf_evsel__run_ioctl (2 samples, 0.12%)</title><rect x="1000.6" y="277" width="1.3" height="15.0" fill="rgb(249,55,8)" rx="2" ry="2" />
+<text  x="1003.58" y="287.5" ></text>
+</g>
+<g >
+<title>?? (1 samples, 0.06%)</title><rect x="994.5" y="85" width="0.6" height="15.0" fill="rgb(215,84,43)" rx="2" ry="2" />
+<text  x="997.46" y="95.5" ></text>
+</g>
+<g >
+<title>@plt (2 samples, 0.12%)</title><rect x="413.3" y="165" width="1.3" height="15.0" fill="rgb(212,123,38)" rx="2" ry="2" />
+<text  x="416.29" y="175.5" ></text>
+</g>
+<g >
+<title>?? (1 samples, 0.06%)</title><rect x="994.5" y="101" width="0.6" height="15.0" fill="rgb(239,226,34)" rx="2" ry="2" />
+<text  x="997.46" y="111.5" ></text>
+</g>
+<g >
+<title>?? (2 samples, 0.12%)</title><rect x="992.4" y="181" width="1.4" height="15.0" fill="rgb(230,85,19)" rx="2" ry="2" />
+<text  x="995.43" y="191.5" ></text>
+</g>
+<g >
+<title>libc_feresetround_sse_ctx (2 samples, 0.12%)</title><rect x="586.4" y="149" width="1.4" height="15.0" fill="rgb(239,70,22)" rx="2" ry="2" />
+<text  x="589.42" y="159.5" ></text>
+</g>
+<g >
+<title>_dl_start_final (1 samples, 0.06%)</title><rect x="995.8" y="277" width="0.7" height="15.0" fill="rgb(211,203,54)" rx="2" ry="2" />
+<text  x="998.82" y="287.5" ></text>
+</g>
+<g >
+<title>?? (2 samples, 0.12%)</title><rect x="69.7" y="197" width="1.4" height="15.0" fill="rgb(233,30,54)" rx="2" ry="2" />
+<text  x="72.75" y="207.5" ></text>
+</g>
+<g >
+<title>sdot_ (29 samples, 1.67%)</title><rect x="631.9" y="149" width="19.7" height="15.0" fill="rgb(230,86,42)" rx="2" ry="2" />
+<text  x="634.91" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (1 samples, 0.06%)</title><rect x="283.6" y="181" width="0.7" height="15.0" fill="rgb(225,201,28)" rx="2" ry="2" />
+<text  x="286.61" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::Sum (6 samples, 0.35%)</title><rect x="381.4" y="197" width="4.1" height="15.0" fill="rgb(209,154,44)" rx="2" ry="2" />
+<text  x="384.38" y="207.5" ></text>
+</g>
+<g >
+<title>__memset_avx2_unaligned_erms (12 samples, 0.69%)</title><rect x="655.0" y="149" width="8.1" height="15.0" fill="rgb(235,7,10)" rx="2" ry="2" />
+<text  x="657.99" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeature::~OnlinePitchFeature (3 samples, 0.17%)</title><rect x="992.4" y="245" width="2.1" height="15.0" fill="rgb(222,3,41)" rx="2" ry="2" />
+<text  x="995.43" y="255.5" ></text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::SetNccfPov (14 samples, 0.81%)</title><rect x="953.0" y="213" width="9.6" height="15.0" fill="rgb(236,200,53)" rx="2" ry="2" />
+<text  x="956.05" y="223.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::OnlinePitchFeatureImpl (15 samples, 0.86%)</title><rect x="982.2" y="229" width="10.2" height="15.0" fill="rgb(233,120,36)" rx="2" ry="2" />
+<text  x="985.24" y="239.5" ></text>
+</g>
+<g >
+<title>kaldi::MatrixBase&lt;float&gt;::CopyColFromVec (89 samples, 5.12%)</title><rect x="71.1" y="197" width="60.4" height="15.0" fill="rgb(213,179,39)" rx="2" ry="2" />
+<text  x="74.10" y="207.5" >kaldi:..</text>
+</g>
+<g >
+<title>__posix_memalign (4 samples, 0.23%)</title><rect x="934.7" y="149" width="2.7" height="15.0" fill="rgb(231,209,5)" rx="2" ry="2" />
+<text  x="937.72" y="159.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (1 samples, 0.06%)</title><rect x="33.1" y="261" width="0.7" height="15.0" fill="rgb(232,111,29)" rx="2" ry="2" />
+<text  x="36.08" y="271.5" ></text>
+</g>
+<g >
+<title>docker-init (2 samples, 0.12%)</title><rect x="998.5" y="325" width="1.4" height="15.0" fill="rgb(207,197,25)" rx="2" ry="2" />
+<text  x="1001.54" y="335.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (1 samples, 0.06%)</title><rect x="994.5" y="37" width="0.6" height="15.0" fill="rgb(209,87,43)" rx="2" ry="2" />
+<text  x="997.46" y="47.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddVec&lt;float&gt; (4 samples, 0.23%)</title><rect x="937.4" y="181" width="2.7" height="15.0" fill="rgb(247,116,51)" rx="2" ry="2" />
+<text  x="940.43" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::LinearResample::SetIndexesAndWeights (5 samples, 0.29%)</title><rect x="989.0" y="197" width="3.4" height="15.0" fill="rgb(227,124,49)" rx="2" ry="2" />
+<text  x="992.03" y="207.5" ></text>
+</g>
+<g >
+<title>__ieee754_pow_fma (303 samples, 17.43%)</title><rect x="414.6" y="165" width="205.8" height="15.0" fill="rgb(249,212,25)" rx="2" ry="2" />
+<text  x="417.65" y="175.5" >__ieee754_pow_fma</text>
+</g>
+<g >
+<title>operator new (3 samples, 0.17%)</title><rect x="996.5" y="309" width="2.0" height="15.0" fill="rgb(252,13,34)" rx="2" ry="2" />
+<text  x="999.50" y="319.5" ></text>
+</g>
+<g >
+<title>cblas_sgemv (202 samples, 11.62%)</title><rect x="131.5" y="165" width="137.2" height="15.0" fill="rgb(246,204,4)" rx="2" ry="2" />
+<text  x="134.53" y="175.5" >cblas_sgemv</text>
+</g>
+<g >
+<title>sgbmv_ (33 samples, 1.90%)</title><rect x="885.8" y="133" width="22.4" height="15.0" fill="rgb(209,156,12)" rx="2" ry="2" />
+<text  x="888.83" y="143.5" >s..</text>
+</g>
+<g >
+<title>do_cos (1 samples, 0.06%)</title><rect x="990.4" y="149" width="0.7" height="15.0" fill="rgb(251,5,45)" rx="2" ry="2" />
+<text  x="993.39" y="159.5" ></text>
+</g>
+<g >
+<title>__sin_fma (2 samples, 0.12%)</title><rect x="987.7" y="165" width="1.3" height="15.0" fill="rgb(239,22,19)" rx="2" ry="2" />
+<text  x="990.68" y="175.5" ></text>
+</g>
+<g >
+<title>mkl_blas_xsaxpy (4 samples, 0.23%)</title><rect x="881.8" y="117" width="2.7" height="15.0" fill="rgb(213,148,49)" rx="2" ry="2" />
+<text  x="884.76" y="127.5" ></text>
+</g>
+<g >
+<title>__pow (11 samples, 0.63%)</title><rect x="24.9" y="293" width="7.5" height="15.0" fill="rgb(232,59,25)" rx="2" ry="2" />
+<text  x="27.94" y="303.5" ></text>
+</g>
+<g >
+<title>sgbmv_ (1 samples, 0.06%)</title><rect x="63.6" y="293" width="0.7" height="15.0" fill="rgb(212,61,7)" rx="2" ry="2" />
+<text  x="66.64" y="303.5" ></text>
+</g>
+<g >
+<title>__sin_fma (1 samples, 0.06%)</title><rect x="32.4" y="293" width="0.7" height="15.0" fill="rgb(245,176,52)" rx="2" ry="2" />
+<text  x="35.41" y="303.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::AcceptWaveform (2 samples, 0.12%)</title><rect x="980.9" y="213" width="1.3" height="15.0" fill="rgb(224,184,3)" rx="2" ry="2" />
+<text  x="983.89" y="223.5" ></text>
+</g>
+<g >
+<title>malloc_consolidate (2 samples, 0.12%)</title><rect x="992.4" y="85" width="1.4" height="15.0" fill="rgb(236,144,34)" rx="2" ry="2" />
+<text  x="995.43" y="95.5" ></text>
+</g>
+<g >
+<title>__memmove_avx_unaligned_erms (1 samples, 0.06%)</title><rect x="667.2" y="165" width="0.7" height="15.0" fill="rgb(233,54,2)" rx="2" ry="2" />
+<text  x="670.22" y="175.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (64 samples, 3.68%)</title><rect x="1146.5" y="309" width="43.5" height="15.0" fill="rgb(241,103,30)" rx="2" ry="2" />
+<text  x="1149.55" y="319.5" >[[ke..</text>
+</g>
+<g >
+<title>__GI___libc_malloc (3 samples, 0.17%)</title><rect x="935.4" y="117" width="2.0" height="15.0" fill="rgb(225,168,5)" rx="2" ry="2" />
+<text  x="938.40" y="127.5" ></text>
+</g>
+<g >
+<title>libc_feholdsetround_sse_ctx (1 samples, 0.06%)</title><rect x="988.4" y="149" width="0.6" height="15.0" fill="rgb(219,197,52)" rx="2" ry="2" />
+<text  x="991.35" y="159.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsdot (5 samples, 0.29%)</title><rect x="382.1" y="117" width="3.4" height="15.0" fill="rgb(215,197,0)" rx="2" ry="2" />
+<text  x="385.06" y="127.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (1 samples, 0.06%)</title><rect x="999.9" y="245" width="0.7" height="15.0" fill="rgb(235,106,43)" rx="2" ry="2" />
+<text  x="1002.90" y="255.5" ></text>
+</g>
+<g >
+<title>__memset_avx2_erms (1 samples, 0.06%)</title><rect x="994.5" y="53" width="0.6" height="15.0" fill="rgb(243,29,16)" rx="2" ry="2" />
+<text  x="997.46" y="63.5" ></text>
+</g>
+<g >
+<title>kaldi::FileInputImpl::Open (1 samples, 0.06%)</title><rect x="39.9" y="293" width="0.7" height="15.0" fill="rgb(223,186,20)" rx="2" ry="2" />
+<text  x="42.87" y="303.5" ></text>
+</g>
+<g >
+<title>[unknown] (10 samples, 0.58%)</title><rect x="1001.9" y="309" width="6.8" height="15.0" fill="rgb(223,190,9)" rx="2" ry="2" />
+<text  x="1004.93" y="319.5" ></text>
+</g>
+<g >
+<title>kaldi::ArbitraryResample::SetIndexes (2 samples, 0.12%)</title><rect x="982.2" y="197" width="1.4" height="15.0" fill="rgb(231,105,15)" rx="2" ry="2" />
+<text  x="985.24" y="207.5" ></text>
+</g>
+<g >
+<title>mkl_blas_errchk_sgemv (1 samples, 0.06%)</title><rect x="58.2" y="293" width="0.7" height="15.0" fill="rgb(236,54,17)" rx="2" ry="2" />
+<text  x="61.20" y="303.5" ></text>
+</g>
+<g >
+<title>cblas_saxpy (4 samples, 0.23%)</title><rect x="937.4" y="165" width="2.7" height="15.0" fill="rgb(241,57,35)" rx="2" ry="2" />
+<text  x="940.43" y="175.5" ></text>
+</g>
+<g >
+<title>mkl_blas_sdot (1 samples, 0.06%)</title><rect x="310.1" y="133" width="0.7" height="15.0" fill="rgb(224,133,50)" rx="2" ry="2" />
+<text  x="313.09" y="143.5" ></text>
+</g>
+<g >
+<title>perf_evlist__prepare_workload (1 samples, 0.06%)</title><rect x="999.9" y="293" width="0.7" height="15.0" fill="rgb(233,227,8)" rx="2" ry="2" />
+<text  x="1002.90" y="303.5" ></text>
+</g>
+<g >
+<title>_int_free (1 samples, 0.06%)</title><rect x="993.8" y="197" width="0.7" height="15.0" fill="rgb(241,0,53)" rx="2" ry="2" />
+<text  x="996.79" y="207.5" ></text>
+</g>
+<g >
+<title>elf_dynamic_do_Rela (2 samples, 0.12%)</title><rect x="64.3" y="133" width="1.4" height="15.0" fill="rgb(242,136,41)" rx="2" ry="2" />
+<text  x="67.32" y="143.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddVecVec (35 samples, 2.01%)</title><rect x="884.5" y="181" width="23.7" height="15.0" fill="rgb(208,44,37)" rx="2" ry="2" />
+<text  x="887.48" y="191.5" >k..</text>
+</g>
+<g >
+<title>kaldi::TableWriterArchiveImpl&lt;kaldi::KaldiObjectHolder&lt;kaldi::MatrixBase&lt;float&gt; &gt; &gt;::Write (1 samples, 0.06%)</title><rect x="995.1" y="229" width="0.7" height="15.0" fill="rgb(226,169,51)" rx="2" ry="2" />
+<text  x="998.14" y="239.5" ></text>
+</g>
+<g >
+<title>operator new (3 samples, 0.17%)</title><rect x="40.6" y="277" width="2.0" height="15.0" fill="rgb(224,2,44)" rx="2" ry="2" />
+<text  x="43.55" y="287.5" ></text>
+</g>
+<g >
+<title>sdot_ (5 samples, 0.29%)</title><rect x="382.1" y="149" width="3.4" height="15.0" fill="rgb(220,125,27)" rx="2" ry="2" />
+<text  x="385.06" y="159.5" ></text>
+</g>
+<g >
+<title>mkl_blas_xsdot (5 samples, 0.29%)</title><rect x="382.1" y="133" width="3.4" height="15.0" fill="rgb(223,106,32)" rx="2" ry="2" />
+<text  x="385.06" y="143.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::AcceptWaveform (19 samples, 1.09%)</title><rect x="654.3" y="213" width="12.9" height="15.0" fill="rgb(225,137,36)" rx="2" ry="2" />
+<text  x="657.32" y="223.5" ></text>
+</g>
+<g >
+<title>_int_malloc (2 samples, 0.12%)</title><rect x="33.8" y="293" width="1.3" height="15.0" fill="rgb(210,76,40)" rx="2" ry="2" />
+<text  x="36.76" y="303.5" ></text>
+</g>
+<g >
+<title>_mid_memalign (5 samples, 0.29%)</title><rect x="663.1" y="149" width="3.4" height="15.0" fill="rgb(235,160,40)" rx="2" ry="2" />
+<text  x="666.14" y="159.5" ></text>
+</g>
+<g >
+<title>openaux (1 samples, 0.06%)</title><rect x="995.8" y="197" width="0.7" height="15.0" fill="rgb(234,217,33)" rx="2" ry="2" />
+<text  x="998.82" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::Add (5 samples, 0.29%)</title><rect x="378.0" y="197" width="3.4" height="15.0" fill="rgb(214,52,23)" rx="2" ry="2" />
+<text  x="380.99" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::Set (1 samples, 0.06%)</title><rect x="908.9" y="181" width="0.7" height="15.0" fill="rgb(213,228,25)" rx="2" ry="2" />
+<text  x="911.92" y="191.5" ></text>
+</g>
+<g >
+<title>__GI__dl_catch_exception (2 samples, 0.12%)</title><rect x="64.3" y="229" width="1.4" height="15.0" fill="rgb(239,124,20)" rx="2" ry="2" />
+<text  x="67.32" y="239.5" ></text>
+</g>
+<g >
+<title>kaldi::VecVec&lt;float&gt; (130 samples, 7.48%)</title><rect x="286.3" y="181" width="88.3" height="15.0" fill="rgb(229,4,0)" rx="2" ry="2" />
+<text  x="289.33" y="191.5" >kaldi::Vec..</text>
+</g>
+<g >
+<title>mkl_blas_xsdot (85 samples, 4.89%)</title><rect x="312.8" y="133" width="57.7" height="15.0" fill="rgb(230,45,5)" rx="2" ry="2" />
+<text  x="315.81" y="143.5" >mkl_bl..</text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::~OnlinePitchFeatureImpl (3 samples, 0.17%)</title><rect x="992.4" y="229" width="2.1" height="15.0" fill="rgb(219,212,41)" rx="2" ry="2" />
+<text  x="995.43" y="239.5" ></text>
+</g>
+<g >
+<title>record__mmap_read_evlist (5 samples, 0.29%)</title><rect x="1005.3" y="245" width="3.4" height="15.0" fill="rgb(221,224,2)" rx="2" ry="2" />
+<text  x="1008.33" y="255.5" ></text>
+</g>
+<g >
+<title>mkl_blas_xsgemv (197 samples, 11.33%)</title><rect x="134.2" y="117" width="133.8" height="15.0" fill="rgb(229,206,15)" rx="2" ry="2" />
+<text  x="137.25" y="127.5" >mkl_blas_xsgemv</text>
+</g>
+<g >
+<title>__exp1_fma (131 samples, 7.54%)</title><rect x="490.7" y="149" width="88.9" height="15.0" fill="rgb(207,130,15)" rx="2" ry="2" />
+<text  x="493.69" y="159.5" >__exp1_fma</text>
+</g>
+<g >
+<title>?? (18 samples, 1.04%)</title><rect x="940.1" y="181" width="12.3" height="15.0" fill="rgb(211,58,11)" rx="2" ry="2" />
+<text  x="943.15" y="191.5" ></text>
+</g>
+<g >
+<title>dl_open_worker (2 samples, 0.12%)</title><rect x="64.3" y="165" width="1.4" height="15.0" fill="rgb(241,208,26)" rx="2" ry="2" />
+<text  x="67.32" y="175.5" ></text>
+</g>
+<g >
+<title>cblas_sdot (6 samples, 0.35%)</title><rect x="381.4" y="165" width="4.1" height="15.0" fill="rgb(234,212,2)" rx="2" ry="2" />
+<text  x="384.38" y="175.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsgemv (197 samples, 11.33%)</title><rect x="134.2" y="101" width="133.8" height="15.0" fill="rgb(208,229,15)" rx="2" ry="2" />
+<text  x="137.25" y="111.5" >mkl_blas_avx2_xs..</text>
+</g>
+<g >
+<title>cblas_sdot (120 samples, 6.90%)</title><rect x="289.0" y="165" width="81.5" height="15.0" fill="rgb(207,53,0)" rx="2" ry="2" />
+<text  x="292.04" y="175.5" >cblas_sdot</text>
+</g>
+<g >
+<title>kaldi::ComputeNccf (332 samples, 19.10%)</title><rect x="396.3" y="197" width="225.4" height="15.0" fill="rgb(247,100,18)" rx="2" ry="2" />
+<text  x="399.32" y="207.5" >kaldi::ComputeNccf</text>
+</g>
+<g >
+<title>kaldi::ArbitraryResample::Resample (1 samples, 0.06%)</title><rect x="980.9" y="197" width="0.7" height="15.0" fill="rgb(250,151,6)" rx="2" ry="2" />
+<text  x="983.89" y="207.5" ></text>
+</g>
+<g >
+<title>__cos_fma (4 samples, 0.23%)</title><rect x="985.0" y="165" width="2.7" height="15.0" fill="rgb(240,128,10)" rx="2" ry="2" />
+<text  x="987.96" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::VecVec&lt;float&gt;@plt (1 samples, 0.06%)</title><rect x="653.6" y="197" width="0.7" height="15.0" fill="rgb(241,211,8)" rx="2" ry="2" />
+<text  x="656.64" y="207.5" ></text>
+</g>
+<g >
+<title>do_sincos_1 (1 samples, 0.06%)</title><rect x="987.7" y="149" width="0.7" height="15.0" fill="rgb(248,66,16)" rx="2" ry="2" />
+<text  x="990.68" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::ComputeNccf (4 samples, 0.23%)</title><rect x="37.2" y="293" width="2.7" height="15.0" fill="rgb(218,162,42)" rx="2" ry="2" />
+<text  x="40.16" y="303.5" ></text>
+</g>
+<g >
+<title>__GI__dl_catch_error (2 samples, 0.12%)</title><rect x="64.3" y="245" width="1.4" height="15.0" fill="rgb(233,3,33)" rx="2" ry="2" />
+<text  x="67.32" y="255.5" ></text>
+</g>
+<g >
+<title>_int_malloc (3 samples, 0.17%)</title><rect x="996.5" y="277" width="2.0" height="15.0" fill="rgb(241,220,20)" rx="2" ry="2" />
+<text  x="999.50" y="287.5" ></text>
+</g>
+<g >
+<title>cblas_sdot (3 samples, 0.17%)</title><rect x="35.1" y="293" width="2.1" height="15.0" fill="rgb(208,46,27)" rx="2" ry="2" />
+<text  x="38.12" y="303.5" ></text>
+</g>
+<g >
+<title>kaldi::VecVec&lt;float&gt; (1 samples, 0.06%)</title><rect x="48.0" y="277" width="0.7" height="15.0" fill="rgb(254,99,42)" rx="2" ry="2" />
+<text  x="51.02" y="287.5" ></text>
+</g>
+<g >
+<title>__exp1_fma (5 samples, 0.29%)</title><rect x="10.0" y="293" width="3.4" height="15.0" fill="rgb(210,226,11)" rx="2" ry="2" />
+<text  x="13.00" y="303.5" ></text>
+</g>
+<g >
+<title>__pow (321 samples, 18.47%)</title><rect x="402.4" y="181" width="218.0" height="15.0" fill="rgb(237,8,27)" rx="2" ry="2" />
+<text  x="405.43" y="191.5" >__pow</text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddMatVec (1 samples, 0.06%)</title><rect x="980.9" y="165" width="0.7" height="15.0" fill="rgb(231,177,32)" rx="2" ry="2" />
+<text  x="983.89" y="175.5" ></text>
+</g>
+<g >
+<title>mkl_blas_sgemv (1 samples, 0.06%)</title><rect x="980.9" y="117" width="0.7" height="15.0" fill="rgb(226,196,12)" rx="2" ry="2" />
+<text  x="983.89" y="127.5" ></text>
+</g>
+<g >
+<title>kaldi::ComputeKaldiPitch (1,363 samples, 78.42%)</title><rect x="69.1" y="261" width="925.4" height="15.0" fill="rgb(235,94,11)" rx="2" ry="2" />
+<text  x="72.07" y="271.5" >kaldi::ComputeKaldiPitch</text>
+</g>
+<g >
+<title>__posix_memalign (1 samples, 0.06%)</title><rect x="283.6" y="149" width="0.7" height="15.0" fill="rgb(216,67,26)" rx="2" ry="2" />
+<text  x="286.61" y="159.5" ></text>
+</g>
+<g >
+<title>mkl_blas__sgemv (201 samples, 11.57%)</title><rect x="132.2" y="149" width="136.5" height="15.0" fill="rgb(223,159,17)" rx="2" ry="2" />
+<text  x="135.21" y="159.5" >mkl_blas__sgemv</text>
+</g>
+<g >
+<title>memset (12 samples, 0.69%)</title><rect x="655.0" y="165" width="8.1" height="15.0" fill="rgb(246,206,52)" rx="2" ry="2" />
+<text  x="657.99" y="175.5" ></text>
+</g>
+<g >
+<title>_start (1,366 samples, 78.60%)</title><rect x="69.1" y="309" width="927.4" height="15.0" fill="rgb(235,123,48)" rx="2" ry="2" />
+<text  x="72.07" y="319.5" >_start</text>
+</g>
+<g >
+<title>[unknown] (7 samples, 0.40%)</title><rect x="64.3" y="309" width="4.8" height="15.0" fill="rgb(227,139,43)" rx="2" ry="2" />
+<text  x="67.32" y="319.5" ></text>
+</g>
+<g >
+<title>__memset_avx2_erms (1 samples, 0.06%)</title><rect x="670.6" y="133" width="0.7" height="15.0" fill="rgb(222,31,39)" rx="2" ry="2" />
+<text  x="673.61" y="143.5" ></text>
+</g>
+<g >
+<title>_dl_map_segments (1 samples, 0.06%)</title><rect x="33.1" y="277" width="0.7" height="15.0" fill="rgb(237,165,39)" rx="2" ry="2" />
+<text  x="36.08" y="287.5" ></text>
+</g>
+<g >
+<title>mkl_serv_lsame (1 samples, 0.06%)</title><rect x="133.6" y="117" width="0.6" height="15.0" fill="rgb(244,99,31)" rx="2" ry="2" />
+<text  x="136.57" y="127.5" ></text>
+</g>
+<g >
+<title>do_sin (1 samples, 0.06%)</title><rect x="991.1" y="149" width="0.6" height="15.0" fill="rgb(236,118,32)" rx="2" ry="2" />
+<text  x="994.07" y="159.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsdot (1 samples, 0.06%)</title><rect x="58.9" y="277" width="0.7" height="15.0" fill="rgb(238,68,25)" rx="2" ry="2" />
+<text  x="61.88" y="287.5" ></text>
+</g>
+<g >
+<title>__GI___libc_free (2 samples, 0.12%)</title><rect x="667.9" y="149" width="1.4" height="15.0" fill="rgb(213,169,48)" rx="2" ry="2" />
+<text  x="670.89" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::ExtractFrame (1 samples, 0.06%)</title><rect x="667.2" y="213" width="0.7" height="15.0" fill="rgb(209,5,26)" rx="2" ry="2" />
+<text  x="670.22" y="223.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsaxpy (2 samples, 0.12%)</title><rect x="938.8" y="117" width="1.3" height="15.0" fill="rgb(235,180,42)" rx="2" ry="2" />
+<text  x="941.79" y="127.5" ></text>
+</g>
+<g >
+<title>__GI___libc_free (1 samples, 0.06%)</title><rect x="993.8" y="213" width="0.7" height="15.0" fill="rgb(218,174,52)" rx="2" ry="2" />
+<text  x="996.79" y="223.5" ></text>
+</g>
+<g >
+<title>perf_evlist__prepare_workload (1 samples, 0.06%)</title><rect x="1004.6" y="261" width="0.7" height="15.0" fill="rgb(253,101,43)" rx="2" ry="2" />
+<text  x="1007.65" y="271.5" ></text>
+</g>
+<g >
+<title>_dl_open (2 samples, 0.12%)</title><rect x="64.3" y="197" width="1.4" height="15.0" fill="rgb(252,225,32)" rx="2" ry="2" />
+<text  x="67.32" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::MatrixBase&lt;float&gt;::SetZero (13 samples, 0.75%)</title><rect x="654.3" y="181" width="8.8" height="15.0" fill="rgb(240,192,26)" rx="2" ry="2" />
+<text  x="657.32" y="191.5" ></text>
+</g>
+<g >
+<title>mkl_blas_xdtrmm (1 samples, 0.06%)</title><rect x="58.9" y="293" width="0.7" height="15.0" fill="rgb(230,131,46)" rx="2" ry="2" />
+<text  x="61.88" y="303.5" ></text>
+</g>
+<g >
+<title>cmd_record (10 samples, 0.58%)</title><rect x="1001.9" y="293" width="6.8" height="15.0" fill="rgb(236,137,4)" rx="2" ry="2" />
+<text  x="1004.93" y="303.5" ></text>
+</g>
+<g >
+<title>dlopen_doit (2 samples, 0.12%)</title><rect x="64.3" y="213" width="1.4" height="15.0" fill="rgb(226,63,34)" rx="2" ry="2" />
+<text  x="67.32" y="223.5" ></text>
+</g>
+<g >
+<title>MKL_Load_Lib (2 samples, 0.12%)</title><rect x="64.3" y="293" width="1.4" height="15.0" fill="rgb(218,222,38)" rx="2" ry="2" />
+<text  x="67.32" y="303.5" ></text>
+</g>
+<g >
+<title>read (1 samples, 0.06%)</title><rect x="1004.6" y="245" width="0.7" height="15.0" fill="rgb(243,50,41)" rx="2" ry="2" />
+<text  x="1007.65" y="255.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (1 samples, 0.06%)</title><rect x="999.2" y="293" width="0.7" height="15.0" fill="rgb(248,186,50)" rx="2" ry="2" />
+<text  x="1002.22" y="303.5" ></text>
+</g>
+<g >
+<title>kaldi::ComputeCorrelation (172 samples, 9.90%)</title><rect x="268.7" y="213" width="116.8" height="15.0" fill="rgb(222,71,16)" rx="2" ry="2" />
+<text  x="271.68" y="223.5" >kaldi::Compute..</text>
+</g>
+<g >
+<title>dl_new_hash (1 samples, 0.06%)</title><rect x="64.3" y="85" width="0.7" height="15.0" fill="rgb(240,152,2)" rx="2" ry="2" />
+<text  x="67.32" y="95.5" ></text>
+</g>
+<g >
+<title>kaldi::SequentialTableReaderScriptImpl&lt;kaldi::WaveHolder&gt;::Value (1 samples, 0.06%)</title><rect x="994.5" y="245" width="0.6" height="15.0" fill="rgb(249,65,22)" rx="2" ry="2" />
+<text  x="997.46" y="255.5" ></text>
+</g>
+<g >
+<title>__GI___libc_malloc (5 samples, 0.29%)</title><rect x="663.1" y="133" width="3.4" height="15.0" fill="rgb(217,0,4)" rx="2" ry="2" />
+<text  x="666.14" y="143.5" ></text>
+</g>
+<g >
+<title>all (1,738 samples, 100%)</title><rect x="10.0" y="341" width="1180.0" height="15.0" fill="rgb(244,48,41)" rx="2" ry="2" />
+<text  x="13.00" y="351.5" ></text>
+</g>
+<g >
+<title>__read_once_size (1 samples, 0.06%)</title><rect x="1008.0" y="197" width="0.7" height="15.0" fill="rgb(249,169,12)" rx="2" ry="2" />
+<text  x="1011.04" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::ComputeBacktraces (41 samples, 2.36%)</title><rect x="909.6" y="197" width="27.8" height="15.0" fill="rgb(246,58,38)" rx="2" ry="2" />
+<text  x="912.60" y="207.5" >k..</text>
+</g>
+<g >
+<title>?? (2 samples, 0.12%)</title><rect x="992.4" y="213" width="1.4" height="15.0" fill="rgb(251,220,30)" rx="2" ry="2" />
+<text  x="995.43" y="223.5" ></text>
+</g>
+<g >
+<title>read (1 samples, 0.06%)</title><rect x="999.9" y="277" width="0.7" height="15.0" fill="rgb(248,58,30)" rx="2" ry="2" />
+<text  x="1002.90" y="287.5" ></text>
+</g>
+<g >
+<title>kaldi::WaveData::Read (1 samples, 0.06%)</title><rect x="994.5" y="181" width="0.6" height="15.0" fill="rgb(251,210,28)" rx="2" ry="2" />
+<text  x="997.46" y="191.5" ></text>
+</g>
+<g >
+<title>cblas_sdot (8 samples, 0.46%)</title><rect x="975.5" y="181" width="5.4" height="15.0" fill="rgb(210,78,47)" rx="2" ry="2" />
+<text  x="978.45" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::VecVec&lt;float&gt;@plt (5 samples, 0.29%)</title><rect x="374.6" y="197" width="3.4" height="15.0" fill="rgb(227,157,51)" rx="2" ry="2" />
+<text  x="377.59" y="207.5" ></text>
+</g>
+<g >
+<title>mkl_blas_xsdot (1 samples, 0.06%)</title><rect x="59.6" y="293" width="0.6" height="15.0" fill="rgb(235,100,8)" rx="2" ry="2" />
+<text  x="62.56" y="303.5" ></text>
+</g>
+<g >
+<title>?? (1 samples, 0.06%)</title><rect x="994.5" y="133" width="0.6" height="15.0" fill="rgb(222,156,4)" rx="2" ry="2" />
+<text  x="997.46" y="143.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::Sum (6 samples, 0.35%)</title><rect x="381.4" y="181" width="4.1" height="15.0" fill="rgb(240,30,24)" rx="2" ry="2" />
+<text  x="384.38" y="191.5" ></text>
+</g>
+<g >
+<title>__posix_memalign (1 samples, 0.06%)</title><rect x="982.9" y="149" width="0.7" height="15.0" fill="rgb(254,66,11)" rx="2" ry="2" />
+<text  x="985.92" y="159.5" ></text>
+</g>
+<g >
+<title>_dl_map_object_from_fd (1 samples, 0.06%)</title><rect x="995.8" y="165" width="0.7" height="15.0" fill="rgb(206,138,34)" rx="2" ry="2" />
+<text  x="998.82" y="175.5" ></text>
+</g>
+<g >
+<title>perf_mmap__read_head (1 samples, 0.06%)</title><rect x="1008.0" y="213" width="0.7" height="15.0" fill="rgb(237,12,36)" rx="2" ry="2" />
+<text  x="1011.04" y="223.5" ></text>
+</g>
+<g >
+<title>mkl_blas_sdot@plt (2 samples, 0.12%)</title><rect x="638.0" y="133" width="1.4" height="15.0" fill="rgb(210,77,27)" rx="2" ry="2" />
+<text  x="641.02" y="143.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::Min (12 samples, 0.69%)</title><rect x="966.6" y="213" width="8.2" height="15.0" fill="rgb(234,160,9)" rx="2" ry="2" />
+<text  x="969.63" y="223.5" ></text>
+</g>
+<g >
+<title>_dl_map_object_from_fd (1 samples, 0.06%)</title><rect x="33.1" y="293" width="0.7" height="15.0" fill="rgb(253,146,51)" rx="2" ry="2" />
+<text  x="36.08" y="303.5" ></text>
+</g>
+<g >
+<title>free_perturb (1 samples, 0.06%)</title><rect x="993.8" y="181" width="0.7" height="15.0" fill="rgb(215,203,9)" rx="2" ry="2" />
+<text  x="996.79" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (1 samples, 0.06%)</title><rect x="982.9" y="181" width="0.7" height="15.0" fill="rgb(222,50,40)" rx="2" ry="2" />
+<text  x="985.92" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::ComputeBacktraces (396 samples, 22.78%)</title><rect x="671.3" y="213" width="268.8" height="15.0" fill="rgb(249,228,4)" rx="2" ry="2" />
+<text  x="674.29" y="223.5" >kaldi::PitchFrameInfo::ComputeBackt..</text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsdot (14 samples, 0.81%)</title><rect x="48.7" y="293" width="9.5" height="15.0" fill="rgb(245,189,10)" rx="2" ry="2" />
+<text  x="51.70" y="303.5" ></text>
+</g>
+<g >
+<title>cblas_sdot (31 samples, 1.78%)</title><rect x="630.6" y="165" width="21.0" height="15.0" fill="rgb(245,38,5)" rx="2" ry="2" />
+<text  x="633.55" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddMatVec (202 samples, 11.62%)</title><rect x="131.5" y="197" width="137.2" height="15.0" fill="rgb(210,67,49)" rx="2" ry="2" />
+<text  x="134.53" y="207.5" >kaldi::VectorBase..</text>
+</g>
+<g >
+<title>?? (17 samples, 0.98%)</title><rect x="940.1" y="149" width="11.6" height="15.0" fill="rgb(245,100,7)" rx="2" ry="2" />
+<text  x="943.15" y="159.5" ></text>
+</g>
+<g >
+<title>pow@plt (2 samples, 0.12%)</title><rect x="620.4" y="181" width="1.3" height="15.0" fill="rgb(236,102,40)" rx="2" ry="2" />
+<text  x="623.37" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::SetNccfPov (4 samples, 0.23%)</title><rect x="959.8" y="197" width="2.8" height="15.0" fill="rgb(205,77,53)" rx="2" ry="2" />
+<text  x="962.84" y="207.5" ></text>
+</g>
+<g >
+<title>_dlerror_run (2 samples, 0.12%)</title><rect x="64.3" y="261" width="1.4" height="15.0" fill="rgb(219,46,36)" rx="2" ry="2" />
+<text  x="67.32" y="271.5" ></text>
+</g>
+<g >
+<title>_mid_memalign (3 samples, 0.17%)</title><rect x="935.4" y="133" width="2.0" height="15.0" fill="rgb(241,5,30)" rx="2" ry="2" />
+<text  x="938.40" y="143.5" ></text>
+</g>
+<g >
+<title>_dl_map_segments (1 samples, 0.06%)</title><rect x="995.8" y="149" width="0.7" height="15.0" fill="rgb(239,44,54)" rx="2" ry="2" />
+<text  x="998.82" y="159.5" ></text>
+</g>
+<g >
+<title>[docker-init] (2 samples, 0.12%)</title><rect x="998.5" y="309" width="1.4" height="15.0" fill="rgb(223,197,18)" rx="2" ry="2" />
+<text  x="1001.54" y="319.5" ></text>
+</g>
+<g >
+<title>fdarray__poll (2 samples, 0.12%)</title><rect x="1003.3" y="261" width="1.3" height="15.0" fill="rgb(235,221,38)" rx="2" ry="2" />
+<text  x="1006.29" y="271.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::Sum (9 samples, 0.52%)</title><rect x="974.8" y="213" width="6.1" height="15.0" fill="rgb(210,112,1)" rx="2" ry="2" />
+<text  x="977.78" y="223.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (80 samples, 4.60%)</title><rect x="10.0" y="309" width="54.3" height="15.0" fill="rgb(228,14,48)" rx="2" ry="2" />
+<text  x="13.00" y="319.5" >[[ker..</text>
+</g>
+<g >
+<title>?? (1 samples, 0.06%)</title><rect x="995.1" y="181" width="0.7" height="15.0" fill="rgb(241,152,28)" rx="2" ry="2" />
+<text  x="998.14" y="191.5" ></text>
+</g>
+<g >
+<title>__ieee754_pow_fma (17 samples, 0.98%)</title><rect x="13.4" y="293" width="11.5" height="15.0" fill="rgb(236,65,25)" rx="2" ry="2" />
+<text  x="16.39" y="303.5" ></text>
+</g>
+<g >
+<title>kaldi::MatrixBase&lt;float&gt;::Write (1 samples, 0.06%)</title><rect x="995.1" y="213" width="0.7" height="15.0" fill="rgb(212,20,31)" rx="2" ry="2" />
+<text  x="998.14" y="223.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (9 samples, 0.52%)</title><rect x="657.0" y="133" width="6.1" height="15.0" fill="rgb(234,160,54)" rx="2" ry="2" />
+<text  x="660.03" y="143.5" ></text>
+</g>
+<g >
+<title>memcpy (1 samples, 0.06%)</title><rect x="667.2" y="181" width="0.7" height="15.0" fill="rgb(239,21,42)" rx="2" ry="2" />
+<text  x="670.22" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::LinearResample::FilterFunc (5 samples, 0.29%)</title><rect x="989.0" y="181" width="3.4" height="15.0" fill="rgb(242,49,16)" rx="2" ry="2" />
+<text  x="992.03" y="191.5" ></text>
+</g>
+<g >
+<title>do_sincos_1 (1 samples, 0.06%)</title><rect x="986.3" y="149" width="0.7" height="15.0" fill="rgb(208,27,24)" rx="2" ry="2" />
+<text  x="989.32" y="159.5" ></text>
+</g>
+<g >
+<title>__libc_read (1 samples, 0.06%)</title><rect x="1004.6" y="229" width="0.7" height="15.0" fill="rgb(241,41,21)" rx="2" ry="2" />
+<text  x="1007.65" y="239.5" ></text>
+</g>
+<g >
+<title>?? (1 samples, 0.06%)</title><rect x="995.1" y="197" width="0.7" height="15.0" fill="rgb(210,134,10)" rx="2" ry="2" />
+<text  x="998.14" y="207.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsdot (8 samples, 0.46%)</title><rect x="975.5" y="133" width="5.4" height="15.0" fill="rgb(217,128,6)" rx="2" ry="2" />
+<text  x="978.45" y="143.5" ></text>
+</g>
+<g >
+<title>mkl_blas_sdot (1 samples, 0.06%)</title><rect x="637.3" y="133" width="0.7" height="15.0" fill="rgb(231,215,36)" rx="2" ry="2" />
+<text  x="640.34" y="143.5" ></text>
+</g>
+<g >
+<title>sdot_ (8 samples, 0.46%)</title><rect x="975.5" y="165" width="5.4" height="15.0" fill="rgb(247,142,20)" rx="2" ry="2" />
+<text  x="978.45" y="175.5" ></text>
+</g>
+<g >
+<title>mkl_blas_xsdot (18 samples, 1.04%)</title><rect x="639.4" y="133" width="12.2" height="15.0" fill="rgb(219,170,30)" rx="2" ry="2" />
+<text  x="642.38" y="143.5" ></text>
+</g>
+<g >
+<title>do_cos (1 samples, 0.06%)</title><rect x="985.6" y="149" width="0.7" height="15.0" fill="rgb(217,213,27)" rx="2" ry="2" />
+<text  x="988.64" y="159.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (2 samples, 0.12%)</title><rect x="1000.6" y="245" width="1.3" height="15.0" fill="rgb(245,153,11)" rx="2" ry="2" />
+<text  x="1003.58" y="255.5" ></text>
+</g>
+<g >
+<title>cblas_sgbmv (35 samples, 2.01%)</title><rect x="884.5" y="149" width="23.7" height="15.0" fill="rgb(216,192,27)" rx="2" ry="2" />
+<text  x="887.48" y="159.5" >c..</text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddVecVec@plt (1 samples, 0.06%)</title><rect x="908.2" y="181" width="0.7" height="15.0" fill="rgb(220,24,31)" rx="2" ry="2" />
+<text  x="911.24" y="191.5" ></text>
+</g>
+<g >
+<title>_dl_map_object (1 samples, 0.06%)</title><rect x="995.8" y="181" width="0.7" height="15.0" fill="rgb(244,179,48)" rx="2" ry="2" />
+<text  x="998.82" y="191.5" ></text>
+</g>
+<g >
+<title>mkl_set_xerbla_interface@plt (1 samples, 0.06%)</title><rect x="268.0" y="133" width="0.7" height="15.0" fill="rgb(250,148,28)" rx="2" ry="2" />
+<text  x="271.00" y="143.5" ></text>
+</g>
+<g >
+<title>_mid_memalign (1 samples, 0.06%)</title><rect x="982.9" y="133" width="0.7" height="15.0" fill="rgb(242,161,14)" rx="2" ry="2" />
+<text  x="985.92" y="143.5" ></text>
+</g>
+<g >
+<title>std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char const*&gt; (1 samples, 0.06%)</title><rect x="995.1" y="149" width="0.7" height="15.0" fill="rgb(247,91,34)" rx="2" ry="2" />
+<text  x="998.14" y="159.5" ></text>
+</g>
+<g >
+<title>__libc_start_main (1,365 samples, 78.54%)</title><rect x="69.1" y="293" width="926.7" height="15.0" fill="rgb(253,43,17)" rx="2" ry="2" />
+<text  x="72.07" y="303.5" >__libc_start_main</text>
+</g>
+<g >
+<title>_dl_sysdep_start (1 samples, 0.06%)</title><rect x="995.8" y="261" width="0.7" height="15.0" fill="rgb(212,40,28)" rx="2" ry="2" />
+<text  x="998.82" y="271.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeature::InputFinished (2 samples, 0.12%)</title><rect x="980.9" y="245" width="1.3" height="15.0" fill="rgb(254,207,16)" rx="2" ry="2" />
+<text  x="983.89" y="255.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::SetZero (1 samples, 0.06%)</title><rect x="670.6" y="165" width="0.7" height="15.0" fill="rgb(206,152,8)" rx="2" ry="2" />
+<text  x="673.61" y="175.5" ></text>
+</g>
+<g >
+<title>__memmove_avx_unaligned_erms (1 samples, 0.06%)</title><rect x="666.5" y="165" width="0.7" height="15.0" fill="rgb(224,197,46)" rx="2" ry="2" />
+<text  x="669.54" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::ArbitraryResample::SetWeights (8 samples, 0.46%)</title><rect x="983.6" y="197" width="5.4" height="15.0" fill="rgb(224,85,20)" rx="2" ry="2" />
+<text  x="986.60" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::SequentialTableReaderScriptImpl&lt;kaldi::WaveHolder&gt;::Value (1 samples, 0.06%)</title><rect x="994.5" y="213" width="0.6" height="15.0" fill="rgb(210,12,50)" rx="2" ry="2" />
+<text  x="997.46" y="223.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::GetFrame (1 samples, 0.06%)</title><rect x="43.3" y="293" width="0.6" height="15.0" fill="rgb(232,72,19)" rx="2" ry="2" />
+<text  x="46.27" y="303.5" ></text>
+</g>
+<g >
+<title>elf_machine_rela (2 samples, 0.12%)</title><rect x="64.3" y="117" width="1.4" height="15.0" fill="rgb(221,156,12)" rx="2" ry="2" />
+<text  x="67.32" y="127.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddMatVec (202 samples, 11.62%)</title><rect x="131.5" y="181" width="137.2" height="15.0" fill="rgb(216,213,29)" rx="2" ry="2" />
+<text  x="134.53" y="191.5" >kaldi::VectorBase..</text>
+</g>
+<g >
+<title>?? (1 samples, 0.06%)</title><rect x="994.5" y="149" width="0.6" height="15.0" fill="rgb(246,148,20)" rx="2" ry="2" />
+<text  x="997.46" y="159.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsgemv_t (194 samples, 11.16%)</title><rect x="136.3" y="85" width="131.7" height="15.0" fill="rgb(246,174,29)" rx="2" ry="2" />
+<text  x="139.28" y="95.5" >mkl_blas_avx2_xs..</text>
+</g>
+<g >
+<title>cblas_sdot@plt (6 samples, 0.35%)</title><rect x="370.5" y="165" width="4.1" height="15.0" fill="rgb(246,144,30)" rx="2" ry="2" />
+<text  x="373.52" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::ArbitraryResample::FilterFunc (8 samples, 0.46%)</title><rect x="983.6" y="181" width="5.4" height="15.0" fill="rgb(252,67,39)" rx="2" ry="2" />
+<text  x="986.60" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::LinearResample::Resample (48 samples, 2.76%)</title><rect x="621.7" y="213" width="32.6" height="15.0" fill="rgb(250,117,46)" rx="2" ry="2" />
+<text  x="624.73" y="223.5" >ka..</text>
+</g>
+<g >
+<title>do_lookup_x (1 samples, 0.06%)</title><rect x="65.0" y="85" width="0.7" height="15.0" fill="rgb(228,77,6)" rx="2" ry="2" />
+<text  x="67.99" y="95.5" ></text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::SetBestState (1 samples, 0.06%)</title><rect x="952.4" y="213" width="0.6" height="15.0" fill="rgb(249,158,15)" rx="2" ry="2" />
+<text  x="955.37" y="223.5" ></text>
+</g>
+<g >
+<title>cblas_sdot@plt (3 samples, 0.17%)</title><rect x="651.6" y="165" width="2.0" height="15.0" fill="rgb(232,89,43)" rx="2" ry="2" />
+<text  x="654.60" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::WaveData::Read (1 samples, 0.06%)</title><rect x="994.5" y="197" width="0.6" height="15.0" fill="rgb(233,138,9)" rx="2" ry="2" />
+<text  x="997.46" y="207.5" ></text>
+</g>
+<g >
+<title>libc_feresetround_sse_ctx (1 samples, 0.06%)</title><rect x="991.7" y="149" width="0.7" height="15.0" fill="rgb(221,42,4)" rx="2" ry="2" />
+<text  x="994.75" y="159.5" ></text>
+</g>
+<g >
+<title>sdot_ (110 samples, 6.33%)</title><rect x="295.8" y="149" width="74.7" height="15.0" fill="rgb(222,147,42)" rx="2" ry="2" />
+<text  x="298.83" y="159.5" >sdot_</text>
+</g>
+<g >
+<title>mkl_blas_xsaxpy (2 samples, 0.12%)</title><rect x="938.8" y="133" width="1.3" height="15.0" fill="rgb(209,66,21)" rx="2" ry="2" />
+<text  x="941.79" y="143.5" ></text>
+</g>
+<g >
+<title>perf_evsel__enable (2 samples, 0.12%)</title><rect x="1000.6" y="293" width="1.3" height="15.0" fill="rgb(234,73,36)" rx="2" ry="2" />
+<text  x="1003.58" y="303.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Destroy (2 samples, 0.12%)</title><rect x="667.9" y="165" width="1.4" height="15.0" fill="rgb(208,109,28)" rx="2" ry="2" />
+<text  x="670.89" y="175.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsgemv_t (1 samples, 0.06%)</title><rect x="980.9" y="69" width="0.7" height="15.0" fill="rgb(235,102,49)" rx="2" ry="2" />
+<text  x="983.89" y="79.5" ></text>
+</g>
+<g >
+<title>kaldi::ArbitraryResample::ArbitraryResample (10 samples, 0.58%)</title><rect x="982.2" y="213" width="6.8" height="15.0" fill="rgb(239,140,2)" rx="2" ry="2" />
+<text  x="985.24" y="223.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddVec&lt;float&gt; (4 samples, 0.23%)</title><rect x="937.4" y="197" width="2.7" height="15.0" fill="rgb(254,78,32)" rx="2" ry="2" />
+<text  x="940.43" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::Matrix&lt;float&gt;::Resize (13 samples, 0.75%)</title><rect x="654.3" y="197" width="8.8" height="15.0" fill="rgb(249,128,4)" rx="2" ry="2" />
+<text  x="657.32" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::VecVec&lt;float&gt; (7 samples, 0.40%)</title><rect x="43.9" y="293" width="4.8" height="15.0" fill="rgb(232,58,26)" rx="2" ry="2" />
+<text  x="46.95" y="303.5" ></text>
+</g>
+<g >
+<title>__GI___libc_free (2 samples, 0.12%)</title><rect x="992.4" y="117" width="1.4" height="15.0" fill="rgb(239,19,21)" rx="2" ry="2" />
+<text  x="995.43" y="127.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::RecomputeBacktraces (2 samples, 0.12%)</title><rect x="667.9" y="181" width="1.4" height="15.0" fill="rgb(206,20,14)" rx="2" ry="2" />
+<text  x="670.89" y="191.5" ></text>
+</g>
+<g >
+<title>mkl_blas__saxpy (5 samples, 0.29%)</title><rect x="881.1" y="133" width="3.4" height="15.0" fill="rgb(227,72,15)" rx="2" ry="2" />
+<text  x="884.08" y="143.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsdot (77 samples, 4.43%)</title><rect x="318.2" y="117" width="52.3" height="15.0" fill="rgb(245,59,33)" rx="2" ry="2" />
+<text  x="321.24" y="127.5" >mkl_b..</text>
+</g>
+<g >
+<title>libc_feholdsetround_sse_ctx (1 samples, 0.06%)</title><rect x="987.0" y="149" width="0.7" height="15.0" fill="rgb(230,169,45)" rx="2" ry="2" />
+<text  x="990.00" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (5 samples, 0.29%)</title><rect x="934.0" y="165" width="3.4" height="15.0" fill="rgb(249,49,43)" rx="2" ry="2" />
+<text  x="937.04" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (5 samples, 0.29%)</title><rect x="663.1" y="181" width="3.4" height="15.0" fill="rgb(244,20,5)" rx="2" ry="2" />
+<text  x="666.14" y="191.5" ></text>
+</g>
+<g >
+<title>_int_malloc (2 samples, 0.12%)</title><rect x="936.1" y="101" width="1.3" height="15.0" fill="rgb(252,147,30)" rx="2" ry="2" />
+<text  x="939.08" y="111.5" ></text>
+</g>
+<g >
+<title>main (1,365 samples, 78.54%)</title><rect x="69.1" y="277" width="926.7" height="15.0" fill="rgb(228,39,35)" rx="2" ry="2" />
+<text  x="72.07" y="287.5" >main</text>
+</g>
+<g >
+<title>mkl_blas_errchk_sgemv (1 samples, 0.06%)</title><rect x="133.6" y="133" width="0.6" height="15.0" fill="rgb(253,187,32)" rx="2" ry="2" />
+<text  x="136.57" y="143.5" ></text>
+</g>
+<g >
+<title>mkl_serv_lsame (1 samples, 0.06%)</title><rect x="885.8" y="101" width="0.7" height="15.0" fill="rgb(226,128,15)" rx="2" ry="2" />
+<text  x="888.83" y="111.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeature::OnlinePitchFeature (15 samples, 0.86%)</title><rect x="982.2" y="245" width="10.2" height="15.0" fill="rgb(205,76,47)" rx="2" ry="2" />
+<text  x="985.24" y="255.5" ></text>
+</g>
+<g >
+<title>mkl_blas_sdot@plt (3 samples, 0.17%)</title><rect x="310.8" y="133" width="2.0" height="15.0" fill="rgb(233,161,26)" rx="2" ry="2" />
+<text  x="313.77" y="143.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeature::GetFrame (1 samples, 0.06%)</title><rect x="42.6" y="293" width="0.7" height="15.0" fill="rgb(232,84,35)" rx="2" ry="2" />
+<text  x="45.59" y="303.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::AcceptWaveform (1,343 samples, 77.27%)</title><rect x="69.1" y="229" width="911.8" height="15.0" fill="rgb(246,94,32)" rx="2" ry="2" />
+<text  x="72.07" y="239.5" >kaldi::OnlinePitchFeatureImpl::AcceptWaveform</text>
+</g>
+<g >
+<title>__GI___libc_malloc (1 samples, 0.06%)</title><rect x="982.9" y="117" width="0.7" height="15.0" fill="rgb(245,219,22)" rx="2" ry="2" />
+<text  x="985.92" y="127.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsdot (15 samples, 0.86%)</title><rect x="641.4" y="117" width="10.2" height="15.0" fill="rgb(238,51,35)" rx="2" ry="2" />
+<text  x="644.42" y="127.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_sgbmv (31 samples, 1.78%)</title><rect x="887.2" y="101" width="21.0" height="15.0" fill="rgb(236,156,17)" rx="2" ry="2" />
+<text  x="890.19" y="111.5" ></text>
+</g>
+<g >
+<title>sdot_ (5 samples, 0.29%)</title><rect x="60.2" y="293" width="3.4" height="15.0" fill="rgb(242,16,30)" rx="2" ry="2" />
+<text  x="63.24" y="303.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddVec&lt;float&gt; (5 samples, 0.29%)</title><rect x="881.1" y="181" width="3.4" height="15.0" fill="rgb(252,41,10)" rx="2" ry="2" />
+<text  x="884.08" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddMatVec (1 samples, 0.06%)</title><rect x="980.9" y="181" width="0.7" height="15.0" fill="rgb(242,220,47)" rx="2" ry="2" />
+<text  x="983.89" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (5 samples, 0.29%)</title><rect x="934.0" y="181" width="3.4" height="15.0" fill="rgb(242,46,3)" rx="2" ry="2" />
+<text  x="937.04" y="191.5" ></text>
+</g>
+<g >
+<title>main (2 samples, 0.12%)</title><rect x="994.5" y="261" width="1.3" height="15.0" fill="rgb(251,8,54)" rx="2" ry="2" />
+<text  x="997.46" y="271.5" ></text>
+</g>
+<g >
+<title>fdarray__filter (1 samples, 0.06%)</title><rect x="1002.6" y="261" width="0.7" height="15.0" fill="rgb(234,142,28)" rx="2" ry="2" />
+<text  x="1005.61" y="271.5" ></text>
+</g>
+<g >
+<title>?? (1 samples, 0.06%)</title><rect x="994.5" y="229" width="0.6" height="15.0" fill="rgb(211,228,13)" rx="2" ry="2" />
+<text  x="997.46" y="239.5" ></text>
+</g>
+<g >
+<title>?? (18 samples, 1.04%)</title><rect x="940.1" y="197" width="12.3" height="15.0" fill="rgb(226,145,47)" rx="2" ry="2" />
+<text  x="943.15" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::ArbitraryResample::Resample (294 samples, 16.92%)</title><rect x="69.1" y="213" width="199.6" height="15.0" fill="rgb(220,60,52)" rx="2" ry="2" />
+<text  x="72.07" y="223.5" >kaldi::ArbitraryResample::..</text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::RecomputeBacktraces (2 samples, 0.12%)</title><rect x="667.9" y="213" width="1.4" height="15.0" fill="rgb(228,5,34)" rx="2" ry="2" />
+<text  x="670.89" y="223.5" ></text>
+</g>
+<g >
+<title>cblas_saxpy (5 samples, 0.29%)</title><rect x="881.1" y="149" width="3.4" height="15.0" fill="rgb(248,48,43)" rx="2" ry="2" />
+<text  x="884.08" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::PitchFrameInfo (18 samples, 1.04%)</title><rect x="940.1" y="213" width="12.3" height="15.0" fill="rgb(209,128,5)" rx="2" ry="2" />
+<text  x="943.15" y="223.5" ></text>
+</g>
+<g >
+<title>?? (17 samples, 0.98%)</title><rect x="940.1" y="133" width="11.6" height="15.0" fill="rgb(244,68,13)" rx="2" ry="2" />
+<text  x="943.15" y="143.5" ></text>
+</g>
+<g >
+<title>compute-kaldi-p (1,456 samples, 83.77%)</title><rect x="10.0" y="325" width="988.5" height="15.0" fill="rgb(217,81,37)" rx="2" ry="2" />
+<text  x="13.00" y="335.5" >compute-kaldi-p</text>
+</g>
+<g >
+<title>__libc_read (1 samples, 0.06%)</title><rect x="999.9" y="261" width="0.7" height="15.0" fill="rgb(233,35,33)" rx="2" ry="2" />
+<text  x="1002.90" y="271.5" ></text>
+</g>
+<g >
+<title>std::vector&lt;char, std::allocator&lt;char&gt; &gt;::_M_default_append (1 samples, 0.06%)</title><rect x="994.5" y="69" width="0.6" height="15.0" fill="rgb(246,143,8)" rx="2" ry="2" />
+<text  x="997.46" y="79.5" ></text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::ComputeBacktraces (1 samples, 0.06%)</title><rect x="981.6" y="197" width="0.6" height="15.0" fill="rgb(236,46,35)" rx="2" ry="2" />
+<text  x="984.57" y="207.5" ></text>
+</g>
+<g >
+<title>?? (1 samples, 0.06%)</title><rect x="994.5" y="117" width="0.6" height="15.0" fill="rgb(243,211,48)" rx="2" ry="2" />
+<text  x="997.46" y="127.5" ></text>
+</g>
+<g >
+<title>mkl_blas_xsgemv (1 samples, 0.06%)</title><rect x="980.9" y="101" width="0.7" height="15.0" fill="rgb(224,220,20)" rx="2" ry="2" />
+<text  x="983.89" y="111.5" ></text>
+</g>
+<g >
+<title>_dl_lookup_symbol_x (2 samples, 0.12%)</title><rect x="64.3" y="101" width="1.4" height="15.0" fill="rgb(224,120,17)" rx="2" ry="2" />
+<text  x="67.32" y="111.5" ></text>
+</g>
+<g >
+<title>log1 (48 samples, 2.76%)</title><rect x="587.8" y="149" width="32.6" height="15.0" fill="rgb(237,176,41)" rx="2" ry="2" />
+<text  x="590.78" y="159.5" >log1</text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::Add (6 samples, 0.35%)</title><rect x="962.6" y="213" width="4.0" height="15.0" fill="rgb(240,107,22)" rx="2" ry="2" />
+<text  x="965.55" y="223.5" ></text>
+</g>
+<g >
+<title>memset (1 samples, 0.06%)</title><rect x="670.6" y="149" width="0.7" height="15.0" fill="rgb(249,172,30)" rx="2" ry="2" />
+<text  x="673.61" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::ComputeLocalCost (42 samples, 2.42%)</title><rect x="881.1" y="197" width="28.5" height="15.0" fill="rgb(208,45,14)" rx="2" ry="2" />
+<text  x="884.08" y="207.5" >ka..</text>
+</g>
+<g >
+<title>__GI__dl_catch_exception (2 samples, 0.12%)</title><rect x="64.3" y="181" width="1.4" height="15.0" fill="rgb(231,171,40)" rx="2" ry="2" />
+<text  x="67.32" y="191.5" ></text>
+</g>
+<g >
+<title>mkl_blas_xsdot (8 samples, 0.46%)</title><rect x="975.5" y="149" width="5.4" height="15.0" fill="rgb(234,218,47)" rx="2" ry="2" />
+<text  x="978.45" y="159.5" ></text>
+</g>
+<g >
+<title>_int_free (2 samples, 0.12%)</title><rect x="992.4" y="101" width="1.4" height="15.0" fill="rgb(209,171,40)" rx="2" ry="2" />
+<text  x="995.43" y="111.5" ></text>
+</g>
+<g >
+<title>mkl_blas__saxpy (3 samples, 0.17%)</title><rect x="938.1" y="149" width="2.0" height="15.0" fill="rgb(227,65,36)" rx="2" ry="2" />
+<text  x="941.11" y="159.5" ></text>
+</g>
+<g >
+<title>_int_free (1 samples, 0.06%)</title><rect x="668.6" y="133" width="0.7" height="15.0" fill="rgb(214,5,48)" rx="2" ry="2" />
+<text  x="671.57" y="143.5" ></text>
+</g>
+<g >
+<title>_dl_catch_exception (1 samples, 0.06%)</title><rect x="995.8" y="213" width="0.7" height="15.0" fill="rgb(248,213,16)" rx="2" ry="2" />
+<text  x="998.82" y="223.5" ></text>
+</g>
+<g >
+<title>mkl_blas__sgemv (1 samples, 0.06%)</title><rect x="980.9" y="133" width="0.7" height="15.0" fill="rgb(218,52,42)" rx="2" ry="2" />
+<text  x="983.89" y="143.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsaxpy (4 samples, 0.23%)</title><rect x="881.8" y="101" width="2.7" height="15.0" fill="rgb(252,134,0)" rx="2" ry="2" />
+<text  x="884.76" y="111.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (1 samples, 0.06%)</title><rect x="982.9" y="165" width="0.7" height="15.0" fill="rgb(219,219,20)" rx="2" ry="2" />
+<text  x="985.92" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddVec&lt;float&gt; (5 samples, 0.29%)</title><rect x="881.1" y="165" width="3.4" height="15.0" fill="rgb(241,71,40)" rx="2" ry="2" />
+<text  x="884.08" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::MatrixBase&lt;float&gt;::Write (1 samples, 0.06%)</title><rect x="995.1" y="165" width="0.7" height="15.0" fill="rgb(237,136,3)" rx="2" ry="2" />
+<text  x="998.14" y="175.5" ></text>
+</g>
+<g >
+<title>perf_mmap__push (2 samples, 0.12%)</title><rect x="1007.4" y="229" width="1.3" height="15.0" fill="rgb(238,16,34)" rx="2" ry="2" />
+<text  x="1010.36" y="239.5" ></text>
+</g>
+<g >
+<title>?? (17 samples, 0.98%)</title><rect x="940.1" y="165" width="11.6" height="15.0" fill="rgb(239,16,14)" rx="2" ry="2" />
+<text  x="943.15" y="175.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeature::AcceptWaveform (3 samples, 0.17%)</title><rect x="40.6" y="293" width="2.0" height="15.0" fill="rgb(246,148,27)" rx="2" ry="2" />
+<text  x="43.55" y="303.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeature::AcceptWaveform (1,343 samples, 77.27%)</title><rect x="69.1" y="245" width="911.8" height="15.0" fill="rgb(225,80,14)" rx="2" ry="2" />
+<text  x="72.07" y="255.5" >kaldi::OnlinePitchFeature::AcceptWaveform</text>
+</g>
+<g >
+<title>__dlopen (2 samples, 0.12%)</title><rect x="64.3" y="277" width="1.4" height="15.0" fill="rgb(244,66,48)" rx="2" ry="2" />
+<text  x="67.32" y="287.5" ></text>
+</g>
+<g >
+<title>?? (2 samples, 0.12%)</title><rect x="992.4" y="197" width="1.4" height="15.0" fill="rgb(242,92,12)" rx="2" ry="2" />
+<text  x="995.43" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (1 samples, 0.06%)</title><rect x="670.6" y="181" width="0.7" height="15.0" fill="rgb(232,7,11)" rx="2" ry="2" />
+<text  x="673.61" y="191.5" ></text>
+</g>
+<g >
+<title>kaldi::VecVec&lt;float&gt; (132 samples, 7.59%)</title><rect x="285.0" y="197" width="89.6" height="15.0" fill="rgb(252,96,0)" rx="2" ry="2" />
+<text  x="287.97" y="207.5" >kaldi::Vec..</text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (2 samples, 0.12%)</title><rect x="997.2" y="261" width="1.3" height="15.0" fill="rgb(227,56,49)" rx="2" ry="2" />
+<text  x="1000.18" y="271.5" ></text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::PitchFrameInfo (17 samples, 0.98%)</title><rect x="940.1" y="117" width="11.6" height="15.0" fill="rgb(250,0,19)" rx="2" ry="2" />
+<text  x="943.15" y="127.5" ></text>
+</g>
+<g >
+<title>_dl_relocate_object (2 samples, 0.12%)</title><rect x="64.3" y="149" width="1.4" height="15.0" fill="rgb(207,158,44)" rx="2" ry="2" />
+<text  x="67.32" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::ComputeNccf (348 samples, 20.02%)</title><rect x="385.5" y="213" width="236.2" height="15.0" fill="rgb(253,73,19)" rx="2" ry="2" />
+<text  x="388.45" y="223.5" >kaldi::ComputeNccf</text>
+</g>
+<g >
+<title>_int_malloc (5 samples, 0.29%)</title><rect x="663.1" y="117" width="3.4" height="15.0" fill="rgb(224,228,46)" rx="2" ry="2" />
+<text  x="666.14" y="127.5" ></text>
+</g>
+<g >
+<title>kaldi::ComputeNccf (4 samples, 0.23%)</title><rect x="37.2" y="277" width="2.7" height="15.0" fill="rgb(245,99,14)" rx="2" ry="2" />
+<text  x="40.16" y="287.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::CopyFromVec (1 samples, 0.06%)</title><rect x="666.5" y="197" width="0.7" height="15.0" fill="rgb(242,153,16)" rx="2" ry="2" />
+<text  x="669.54" y="207.5" ></text>
+</g>
+<g >
+<title>mkl_blas_errchk_sgbmv (2 samples, 0.12%)</title><rect x="885.8" y="117" width="1.4" height="15.0" fill="rgb(240,114,15)" rx="2" ry="2" />
+<text  x="888.83" y="127.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::AddVecVec (35 samples, 2.01%)</title><rect x="884.5" y="165" width="23.7" height="15.0" fill="rgb(221,215,29)" rx="2" ry="2" />
+<text  x="887.48" y="175.5" >k..</text>
+</g>
+<g >
+<title>dl_main (1 samples, 0.06%)</title><rect x="995.8" y="245" width="0.7" height="15.0" fill="rgb(218,123,31)" rx="2" ry="2" />
+<text  x="998.82" y="255.5" ></text>
+</g>
+<g >
+<title>__ioctl (2 samples, 0.12%)</title><rect x="1000.6" y="261" width="1.3" height="15.0" fill="rgb(207,56,4)" rx="2" ry="2" />
+<text  x="1003.58" y="271.5" ></text>
+</g>
+<g >
+<title>?? (2 samples, 0.12%)</title><rect x="992.4" y="149" width="1.4" height="15.0" fill="rgb(210,201,17)" rx="2" ry="2" />
+<text  x="995.43" y="159.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::UpdateRemainder (2 samples, 0.12%)</title><rect x="669.9" y="197" width="1.4" height="15.0" fill="rgb(206,53,33)" rx="2" ry="2" />
+<text  x="672.93" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::~OnlinePitchFeatureImpl (2 samples, 0.12%)</title><rect x="992.4" y="133" width="1.4" height="15.0" fill="rgb(209,28,6)" rx="2" ry="2" />
+<text  x="995.43" y="143.5" ></text>
+</g>
+<g >
+<title>kaldi::LinearResample::LinearResample (5 samples, 0.29%)</title><rect x="989.0" y="213" width="3.4" height="15.0" fill="rgb(220,78,33)" rx="2" ry="2" />
+<text  x="992.03" y="223.5" ></text>
+</g>
+<g >
+<title>std::vector&lt;char, std::allocator&lt;char&gt; &gt;::_M_default_append (1 samples, 0.06%)</title><rect x="994.5" y="165" width="0.6" height="15.0" fill="rgb(230,85,13)" rx="2" ry="2" />
+<text  x="997.46" y="175.5" ></text>
+</g>
+<g >
+<title>mkl_serv_lsame@plt (1 samples, 0.06%)</title><rect x="886.5" y="101" width="0.7" height="15.0" fill="rgb(238,93,37)" rx="2" ry="2" />
+<text  x="889.51" y="111.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::UpdateRemainder (3 samples, 0.17%)</title><rect x="669.3" y="213" width="2.0" height="15.0" fill="rgb(217,154,43)" rx="2" ry="2" />
+<text  x="672.25" y="223.5" ></text>
+</g>
+<g >
+<title>kaldi::TableWriterArchiveImpl&lt;kaldi::KaldiObjectHolder&lt;kaldi::MatrixBase&lt;float&gt; &gt; &gt;::Write (1 samples, 0.06%)</title><rect x="995.1" y="245" width="0.7" height="15.0" fill="rgb(252,119,20)" rx="2" ry="2" />
+<text  x="998.14" y="255.5" ></text>
+</g>
+<g >
+<title>kaldi::OnlinePitchFeatureImpl::InputFinished (2 samples, 0.12%)</title><rect x="980.9" y="229" width="1.3" height="15.0" fill="rgb(249,9,5)" rx="2" ry="2" />
+<text  x="983.89" y="239.5" ></text>
+</g>
+<g >
+<title>mkl_blas_sgemv (197 samples, 11.33%)</title><rect x="134.2" y="133" width="133.8" height="15.0" fill="rgb(238,197,16)" rx="2" ry="2" />
+<text  x="137.25" y="143.5" >mkl_blas_sgemv</text>
+</g>
+<g >
+<title>kaldi::PitchFrameInfo::PitchFrameInfo (1 samples, 0.06%)</title><rect x="951.7" y="165" width="0.7" height="15.0" fill="rgb(213,158,23)" rx="2" ry="2" />
+<text  x="954.69" y="175.5" ></text>
+</g>
+<g >
+<title>__GI___libc_malloc (3 samples, 0.17%)</title><rect x="996.5" y="293" width="2.0" height="15.0" fill="rgb(242,95,9)" rx="2" ry="2" />
+<text  x="999.50" y="303.5" ></text>
+</g>
+<g >
+<title>__posix_memalign (5 samples, 0.29%)</title><rect x="663.1" y="165" width="3.4" height="15.0" fill="rgb(241,217,52)" rx="2" ry="2" />
+<text  x="666.14" y="175.5" ></text>
+</g>
+<g >
+<title>mkl_blas_avx2_xsgemv (1 samples, 0.06%)</title><rect x="980.9" y="85" width="0.7" height="15.0" fill="rgb(247,46,13)" rx="2" ry="2" />
+<text  x="983.89" y="95.5" ></text>
+</g>
+<g >
+<title>kaldi::ArbitraryResample::Resample (2 samples, 0.12%)</title><rect x="69.7" y="181" width="1.4" height="15.0" fill="rgb(254,30,45)" rx="2" ry="2" />
+<text  x="72.75" y="191.5" ></text>
+</g>
+<g >
+<title>__exp1_fma (5 samples, 0.29%)</title><rect x="65.7" y="293" width="3.4" height="15.0" fill="rgb(248,53,23)" rx="2" ry="2" />
+<text  x="68.67" y="303.5" ></text>
+</g>
+<g >
+<title>_dl_map_object_deps (1 samples, 0.06%)</title><rect x="995.8" y="229" width="0.7" height="15.0" fill="rgb(223,111,48)" rx="2" ry="2" />
+<text  x="998.82" y="239.5" ></text>
+</g>
+<g >
+<title>__cmd_record (10 samples, 0.58%)</title><rect x="1001.9" y="277" width="6.8" height="15.0" fill="rgb(217,131,9)" rx="2" ry="2" />
+<text  x="1004.93" y="287.5" ></text>
+</g>
+<g >
+<title>kaldi::VecVec&lt;float&gt; (35 samples, 2.01%)</title><rect x="629.9" y="197" width="23.7" height="15.0" fill="rgb(236,28,54)" rx="2" ry="2" />
+<text  x="632.87" y="207.5" >k..</text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (1 samples, 0.06%)</title><rect x="283.6" y="165" width="0.7" height="15.0" fill="rgb(239,68,3)" rx="2" ry="2" />
+<text  x="286.61" y="175.5" ></text>
+</g>
+<g >
+<title>cblas_sgemv (1 samples, 0.06%)</title><rect x="980.9" y="149" width="0.7" height="15.0" fill="rgb(245,117,48)" rx="2" ry="2" />
+<text  x="983.89" y="159.5" ></text>
+</g>
+<g >
+<title>_int_malloc (1 samples, 0.06%)</title><rect x="41.9" y="245" width="0.7" height="15.0" fill="rgb(224,191,53)" rx="2" ry="2" />
+<text  x="44.91" y="255.5" ></text>
+</g>
+<g >
+<title>__GI___poll (2 samples, 0.12%)</title><rect x="1003.3" y="245" width="1.3" height="15.0" fill="rgb(212,102,54)" rx="2" ry="2" />
+<text  x="1006.29" y="255.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::CopyFromVec (1 samples, 0.06%)</title><rect x="667.2" y="197" width="0.7" height="15.0" fill="rgb(225,173,0)" rx="2" ry="2" />
+<text  x="670.22" y="207.5" ></text>
+</g>
+<g >
+<title>record__mmap_read_all (5 samples, 0.29%)</title><rect x="1005.3" y="261" width="3.4" height="15.0" fill="rgb(220,110,21)" rx="2" ry="2" />
+<text  x="1008.33" y="271.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::Sum (8 samples, 0.46%)</title><rect x="975.5" y="197" width="5.4" height="15.0" fill="rgb(226,30,21)" rx="2" ry="2" />
+<text  x="978.45" y="207.5" ></text>
+</g>
+<g >
+<title>do_sin (1 samples, 0.06%)</title><rect x="987.7" y="133" width="0.7" height="15.0" fill="rgb(249,81,54)" rx="2" ry="2" />
+<text  x="990.68" y="143.5" ></text>
+</g>
+<g >
+<title>kaldi::ComputeCorrelation (8 samples, 0.46%)</title><rect x="279.5" y="197" width="5.5" height="15.0" fill="rgb(210,190,34)" rx="2" ry="2" />
+<text  x="282.54" y="207.5" ></text>
+</g>
+<g >
+<title>perf (13 samples, 0.75%)</title><rect x="999.9" y="325" width="8.8" height="15.0" fill="rgb(237,224,38)" rx="2" ry="2" />
+<text  x="1002.90" y="335.5" ></text>
+</g>
+<g >
+<title>do_cos (1 samples, 0.06%)</title><rect x="986.3" y="133" width="0.7" height="15.0" fill="rgb(218,16,17)" rx="2" ry="2" />
+<text  x="989.32" y="143.5" ></text>
+</g>
+<g >
+<title>kaldi::VecVec&lt;float&gt; (35 samples, 2.01%)</title><rect x="629.9" y="181" width="23.7" height="15.0" fill="rgb(241,62,33)" rx="2" ry="2" />
+<text  x="632.87" y="191.5" >k..</text>
+</g>
+<g >
+<title>__GI___libc_malloc (3 samples, 0.17%)</title><rect x="40.6" y="261" width="2.0" height="15.0" fill="rgb(245,148,36)" rx="2" ry="2" />
+<text  x="43.55" y="271.5" ></text>
+</g>
+<g >
+<title>kaldi::Vector&lt;float&gt;::Resize (5 samples, 0.29%)</title><rect x="663.1" y="197" width="3.4" height="15.0" fill="rgb(226,116,52)" rx="2" ry="2" />
+<text  x="666.14" y="207.5" ></text>
+</g>
+<g >
+<title>kaldi::LinearResample::Resample (9 samples, 0.52%)</title><rect x="623.8" y="197" width="6.1" height="15.0" fill="rgb(225,142,39)" rx="2" ry="2" />
+<text  x="626.76" y="207.5" ></text>
+</g>
+<g >
+<title>[[kernel.kallsyms]] (3 samples, 0.17%)</title><rect x="999.9" y="309" width="2.0" height="15.0" fill="rgb(224,145,20)" rx="2" ry="2" />
+<text  x="1002.90" y="319.5" ></text>
+</g>
+<g >
+<title>kaldi::VectorBase&lt;float&gt;::CopyFromVec@plt (1 samples, 0.06%)</title><rect x="284.3" y="181" width="0.7" height="15.0" fill="rgb(218,59,16)" rx="2" ry="2" />
+<text  x="287.29" y="191.5" ></text>
+</g>
+<g >
+<title>__cos_fma (3 samples, 0.17%)</title><rect x="990.4" y="165" width="2.0" height="15.0" fill="rgb(254,83,41)" rx="2" ry="2" />
+<text  x="993.39" y="175.5" ></text>
+</g>
+</g>
+</svg>
