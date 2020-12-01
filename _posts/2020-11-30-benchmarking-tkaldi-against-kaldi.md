@@ -2,10 +2,12 @@
 layout: post
 title: Benchmarking tKaldi against Kaldi
 categories: []
-published: false
-command_id: 0
+published: true
+command_id: 15
 
 ---
+
+## Compiling `compute-kaldi-pitch-feats` binary
 
 I have further extended the Vector / Matrix class implementation so that the `featbin/compute-kaldi-pitch-feats.cc` is compiled. This involved adding methods that are used for I/O, and header files like `compressed-matrix.h` and `sparse-matrix.h`. It turned out that these matrix are not related to BLAS operations, so I could bring them in without any modification.
 
@@ -54,6 +56,8 @@ $ ldd /tkaldi/bin/compute-kaldi-pitch-feats
   /lib64/ld-linux-x86-64.so.2 (0x00007f15b8007000)
 ```
 
+## Benchmark 1. Wall time
+
 The first benchmark is wall time. The binary executable of tKaldi is very slow so I just ran the binary with `time` command. The command looks like the following.
 
 ```bash
@@ -101,6 +105,8 @@ With this, I got the following result.
 
 Well, it's very slow. Very very slow. I was hoping that tKladi's performance is only a few times slower than Kaldi's version, but the reality is very hard.
 
+## Benchmark 2. Flamegraph
+
 Next, I ran `perf` command to get an insight of time consumption.
 
 ```bash
@@ -108,7 +114,7 @@ perf record --all-cpus --freq=99 --call-graph dwarf \
     compute-kaldi-pitch-feats --sample-frequency="${rate}" "scp:${scp_path}" "ark:${ark_path}"
 ```
 
-The following figures are the [flame graphs](http://www.brendangregg.com/flamegraphs.html) of these commands. You can click to zoom up.
+The following figures are the [flame graphs](http://www.brendangregg.com/flamegraphs.html) of these commands. You can click the each component and it will zoom up.
 
 {::nomarkdown}
 <embed src="../assets/2020-11-30-benchmarking-tkaldi-against-kaldi/kaldi.svg" style="position: relative; width: 100%;"/>
@@ -118,8 +124,48 @@ The following figures are the [flame graphs](http://www.brendangregg.com/flamegr
 <embed src="../assets/2020-11-30-benchmarking-tkaldi-against-kaldi/tkaldi.svg" style="position: relative; width: 100%;"/>
 {:/}
 
-I am new to these performance tools so cannot get much insight from these graphs, but as expected, there is a lot of overhead in tKaldi's version, which I do not think have much control.
+In general, Torch adds a lot of overheads before the actual computation happens. We might be able to get rid of some of them (like autograd). Let's look into the how the time spent on the core part has changed.
+
+**Kaldi**
+
+<center>
+<table>
+  <tr>
+    <th style="text-align: center" colspan="3">kaldi::OnlinePitchFeatureImpl::AcceptWaveform (1343 samples)</th>
+  </tr>
+  <tr><td>29.5%</td><td>396 samples</td><td>kaldi::PitchFrameInfo::ComputeBacktraces</td></tr>
+  <tr><td>25.9%</td><td>348 samples</td><td>kaldi::ComputeNCCF</td></tr>
+  <tr><td>21.9%</td><td>294 samples</td><td>kaldi::ArbitraryResample::Resample</td></tr>
+  <tr><td>12.8%</td><td>172 samples</td><td>kaldi::ComputeCorrelation</td></tr>
+  <tr><td>3.6%</td><td>48 samples</td><td>kaldi::LinearResample::Resample</td></tr>
+</table>
+</center>
+
+**tKaldi**
+
+<center>
+<table>
+  <tr>
+    <th style="text-align: center" colspan="3">kaldi::OnlinePitchFeatureImpl::AcceptWaveform (908 samples)</th>
+  </tr>
+  <tr><td>32.2%</td><td>293 samples</td><td>kaldi::SetNccfPoV</td></tr>
+  <tr><td>24.6%</td><td>223 samples</td><td>kaldi::ComputeNCCF</td></tr>
+  <tr><td>24.4%</td><td>222 samples</td><td>kaldi::ComputeCorrelation</td></tr>
+  <tr><td>8.9%</td><td>81 samples</td><td>kaldi::LinearResample::Resample</td></tr>
+  <tr><td>2.2%</td><td>20 samples</td><td>kaldi::PitchFrameInfo::ComputeBacktraces</td></tr>
+  <tr><td>1.8%</td><td>16 samples</td><td>kaldi::ArbitraryResample::Resample</td></tr>
+</table>
+</center>
 
 
+The original Kaldi implementation spends one-third of time in `PitchFrameInfo::ComputeBacktraces` [[doc](https://kaldi-asr.org/doc/classkaldi_1_1PitchFrameInfo.html#afbc3efb81375265bea318db6855f7f8f), [impl](https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/feat/pitch-functions.cc#L306-L484)], which performs Viterbi computation.
 
-In the next step, 
+On the other hand, tKaldi's implementation spend much more time on `SetNccfPoV` and `ComputeNCCF` and these functions spend most of time in `at::Tensor::index`. So one of the bottlenecks of tKaldi is indexing. This confirms the intuition I got when I implemented the corresponding <a href="/tkaldi/implementing-kaldis-vector-matrix-library/#element-access-and-memory-access">element access operation</a>.
+
+The next step is to make the tKaldi's computation faster. There are two approaches I can think of so far.
+
+1. Change the highlevel implementation (like `LinearResample` or `OnlinePitchFeatureImpl`) to vectorize the computation. Get rid of element access.
+
+2. Adopt parallel / concurrent model.
+
+Both should work for computations like resampling, but at the moment I am not sure if such approach works for Viterbi algorithm.
