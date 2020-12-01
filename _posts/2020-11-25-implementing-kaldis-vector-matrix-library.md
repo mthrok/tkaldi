@@ -4,7 +4,7 @@ title: Implementing Kaldi's Vector/Matrix library
 categories: []
 published: true
 comment_id: 4
-
+excerpt: Implements Kaldi's Vector/Matrix classes with PyTorch's Tensor class.
 ---
 
 The basis of Kaldi is the family of vector / matrix classes, which are backed by a low level BLAS library.

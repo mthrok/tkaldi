@@ -4,7 +4,7 @@ title: Benchmarking tKaldi against Kaldi
 categories: []
 published: true
 command_id: 15
-
+excerpt: How fast is tKaldi's binary executable compared against Kaldi's?
 ---
 
 ## Compiling `compute-kaldi-pitch-feats` binary

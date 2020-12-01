@@ -4,10 +4,10 @@ title: Building Kaldi with custom Matrix implementations
 categories: []
 published: true
 comment_id: 13
-
+excerpt: Building <code class="language-plaintext highlighter-rouge">kaldi::ComputeKaldiPitch</code> and adding wrapper function then bind it with PyTorch.
 ---
 
-Once the Vector / Matrix classes are implemented, then we can bring in the implementation of higher level functions. We need to make some modifications to header files, though, so that the implementations missing and not used, like `sp-matrix.h`, are not included. This can be done in [`matrix-lib.h`](https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/matrix-lib.h#L28-L34)
+Once the Vector / Matrix classes are implemented, then we can bring in the implementation of higher level functions. We need to make some modifications to header files, though, so that the implementations missing and not used, like `sp-matrix.h`, are not included. This can be done in [`matrix-lib.h`](https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/matrix-lib.h#L28-L34).
 
 Another modification required is Kaldi's numeric type definitions. Kaldi's numeric type definisions, like `int32`, are from OpenFST, and there is a place to chage [this](https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/base/kaldi-types.h#L57-L73).
 

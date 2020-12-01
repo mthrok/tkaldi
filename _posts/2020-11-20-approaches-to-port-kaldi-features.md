@@ -4,8 +4,10 @@ title: Approaches to port Kaldi features
 categories: []
 published: true
 comment_id: 1
-
+excerpt: Let's look at the ways to make Kaldi feature available in Python.
 ---
+
+## Preface
 
 [Kaldi](https://github.com/kaldi-asr/kaldi) is a software for Automatic Speech Recognition (ASR), which had enormous impact on both research of and production system.
 
@@ -22,6 +24,8 @@ Talking about the transition, there is another exciting project. [GTN](https://g
 So, the technological scene of Speech Recogniton shaped by K2 FST, Lhoste Speech, GTN and PyTorch, how can we close the loop so that everything is differential? And how can we make it accessible to from people in research to people in industry?
 
 Okay, enough about introductory remarks. Let's move onto the fun part. How can we port the missing ingredients from Kaldi to PyTorch realm?
+
+## Existing Approaches to make Kaldi features available
 
 Looking at the existing libraries, I think there are two approaches;
 
@@ -67,6 +71,8 @@ This approach implements the same logic in Python.
       - No systematic way to translate C++ code into Pyhton code.
       - One has to understand all the logics of each Kaldi feature written in C++.
    - No control on low level implementatoin.
+
+## The third approach
 
 After spending some time trying the approach 1, I realized that there is another way to port Kaldi features.
 
