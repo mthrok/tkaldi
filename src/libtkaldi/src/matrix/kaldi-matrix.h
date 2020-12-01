@@ -81,7 +81,7 @@ struct MatrixBase {
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L112-L120
   inline const Real operator() (MatrixIndexT r, MatrixIndexT c) const {
-    return tensor_.index({Slice(r), Slice(c)}).item().to<Real>();
+    return tensor_.accessor<Real, 2>()[r][c];
   }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-matrix.h#L124-L125

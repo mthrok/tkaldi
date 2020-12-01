@@ -53,10 +53,10 @@ struct VectorBase {
   // Kaldi-compatible methods
   ////////////////////////////////////////////////////////////////////////////////
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L42-L43
-  void SetZero() { Set(0); }
+  void SetZero() { tensor_.zero_(); }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L48-L49
-  void Set(Real f) { tensor_.index_put_({"..."}, f); }
+  void Set(Real f) { tensor_.fill_(f); }
 
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.h#L62-L63
   inline MatrixIndexT Dim() const { return tensor_.numel(); };
@@ -101,7 +101,7 @@ struct VectorBase {
   // https://github.com/kaldi-asr/kaldi/blob/7fb716aa0f56480af31514c7e362db5c9f787fd4/src/matrix/kaldi-vector.cc#L816-L832
   void ApplyFloor(Real floor_val, MatrixIndexT *floored_count = nullptr) {
     auto index = tensor_ < floor_val;
-    auto tmp = tensor_.index_put_({index}, floor_val);
+    tensor_.index_put_({index}, floor_val);
     if (floored_count) {
       *floored_count = index.sum().item().template to<MatrixIndexT>();
     }
